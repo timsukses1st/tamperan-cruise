@@ -654,6 +654,7 @@ const SUB_TAB = {
   atur: [
     ['harga',   'Harga & paket',      'atur'],
     ['voucher', 'Voucher & tambahan', 'voucher'],
+    ['galeri',  'Galeri foto',        'galeri'],
   ],
 };
 
@@ -801,7 +802,7 @@ const LAYAR = {
   ringkas:tabRingkas, pesanan:tabPesanan, fu:tabFollowUp, manifest:tabManifest,
   agen:tabAgen, atur:tabAtur, komisi:tabKomisi, boarding:tabBoarding,
   kapal:tabKapal, berangkat:tabBerangkat, voucher:tabVoucher,
-  biro:tabBiro, akses:tabAkses,
+  biro:tabBiro, akses:tabAkses, galeri:tabGaleri,
 };
 
 function buka(tab, sub){
@@ -1223,6 +1224,20 @@ function dataLatihan(){
       { id:K1, nama:'Kapal 1', kapasitas:40, aktif:true, urutan:1 },
       { id:K2, nama:'Kapal 2', kapasitas:25, aktif:true, urutan:2 },
     ],
+    /* Galeri latihan memakai gambar cadangan .svg yang memang sudah ada di
+       folder img/, bukan tautan ke internet: mode panduan harus tetap jalan
+       walau tidak ada koneksi, dan tidak boleh memanggil server luar. */
+    galeri: [
+      { id:'gal-lat1', urutan:0, judul:'Berlayar pagi di Teluk Gelon',
+        sumber:'tautan', url:'/img/ph-daily.svg', path:null,
+        lebar:900, tinggi:502, aktif:true, dibuat:'2026-10-02T08:10:00Z' },
+      { id:'gal-lat2', urutan:1, judul:'Rombongan biro, 24 orang',
+        sumber:'tautan', url:'/img/ph-1day.svg', path:null,
+        lebar:900, tinggi:491, aktif:true, dibuat:'2026-10-09T07:40:00Z' },
+      { id:'gal-lat3', urutan:2, judul:'Foto lama, sementara disembunyikan',
+        sumber:'tautan', url:'/img/ph-umum.svg', path:null,
+        lebar:900, tinggi:500, aktif:false, dibuat:'2026-09-21T06:15:00Z' },
+    ],
     agen: [
       { id:AG.anto, nama:'Anto Prasetyo',  kode:'ANTO01',      boleh_biro:false, aktif:true },
       { id:AG.budi, nama:'Budi Santoso',   kode:'BUDI2026',    boleh_biro:true,  aktif:true },
@@ -1381,6 +1396,16 @@ function kueriLatihan(nama){
       arr.forEach(x => (LATIH[nama] ||= []).push({ id:'lat-'+Math.random().toString(36).slice(2,8),
         dibuat:new Date().toISOString(), ...x }));
       return Promise.resolve({ data:null, error:null });
+    },
+    /* delete() ditambahkan waktu galeri dibuat. Tanpa ini, menekan Hapus di
+       mode panduan melempar "delete is not a function" — bukan ditolak dengan
+       sopan, tapi gagal mentah. Bentuknya ditiru dari update(): .eq() lalu
+       Promise, supaya pemanggilnya tidak perlu tahu sedang di mode mana. */
+    delete(){
+      return { eq(k, v){
+        if (LATIH[nama]) LATIH[nama] = LATIH[nama].filter(r => r[k] !== v);
+        return Promise.resolve({ data:null, error:null });
+      }};
     },
     upsert(nilai, opsi){
       const kunci = opsi?.onConflict || 'id';
@@ -1821,7 +1846,31 @@ function hpPolos(hp){
 const DB = {
   from: nama => S.latihan ? kueriLatihan(nama) : sb.from(nama),
   rpc:  (nama, arg) => S.latihan ? rpcLatihan(nama, arg) : sb.rpc(nama, arg),
+
+  /* Storage HARUS ikut dicegat di mode panduan. Tanpa ini, orang yang sedang
+     belajar lalu menekan "Tambah foto" akan benar-benar mengunggah berkas ke
+     bucket sungguhan — mode panduan yang meninggalkan jejak di produksi bukan
+     mode panduan. Yang dikembalikan bentuknya sama persis dengan punya
+     Supabase ({data,error}) supaya kode pemanggilnya tidak perlu tahu sedang
+     di mode mana. */
+  storage: {
+    from: bucket => S.latihan ? storageLatihan(bucket) : sb.storage.from(bucket),
+  },
 };
+
+/* Storage palsu untuk mode panduan. Mengembalikan URL gambar contoh bawaan
+   yang sudah ada di berkas ini, jadi galerinya tetap kelihatan isinya tanpa
+   satu byte pun naik ke server. */
+function storageLatihan(bucket){
+  const tunda = nilai => new Promise(r => setTimeout(() => r(nilai), 260));
+  return {
+    upload: async (jalur) => tunda({ data: { path: jalur }, error: null }),
+    remove: async () => tunda({ data: [], error: null }),
+    getPublicUrl: (jalur) => ({
+      data: { publicUrl: `/img/ph-umum.svg#latihan=${encodeURIComponent(jalur)}` }
+    }),
+  };
+}
 
 /* Daftar yang diambil sekali lalu dipakai ulang. WAJIB dikosongkan tiap kali
    sumber data berganti, kalau tidak: pratinjau agen di mode panduan memakai id
@@ -5232,6 +5281,333 @@ async function simpanNama(id, lama, inp, tutup){
   if (error) return gagalPesan(error);
   pesan(`Nama diubah jadi <b>${esc(baru)}</b>. Catatan audit lama tetap memakai nama sebelumnya.`, 9000);
   tabAkses();
+}
+
+/* ====================== GALERI FOTO HALAMAN UTAMA ======================
+   Jumlah foto bebas. Dua sumber: berkas yang diunggah ke bucket 'galeri', atau
+   tautan ke foto yang sudah ada di internet.
+
+   Soal EGRESS, dan ini alasan utama bentuk layar ini. Jatah gratis Supabase
+   5 GB/bulan. Foto apa adanya dari kamera HP ~3,5 MB; galeri 20 foto berarti
+   70 MB per pengunjung yang menggulung sampai bawah — jatahnya habis di sekitar
+   70 pengunjung. Dikecilkan ke lebar 1400 px kualitas 0,72 jadi ~200 KB, dan
+   angka itu berubah jadi ~20.000 pengunjung. Maka pengecilan dilakukan DI
+   BROWSER sebelum berkasnya naik: Mas Dik tetap memilih foto 3,5 MB dari HP,
+   yang naik ke server sudah versi kecilnya. */
+const GALERI_LEBAR_MAKS = 1400;
+const GALERI_MUTU       = 0.72;
+
+/* Mengecilkan foto memakai canvas, lalu mengembalikan Blob JPEG.
+
+   Lebar DAN tinggi asli ikut dikembalikan — disimpan ke kolom lebar/tinggi dan
+   dipakai halaman publik untuk menyediakan tempat sebelum fotonya termuat.
+   Tanpa itu, galeri yang memuat bertahap membuat halaman melompat-lompat tiap
+   satu foto selesai. */
+function kecilkanFoto(berkas){
+  return new Promise((selesai, gagal) => {
+    const pembaca = new FileReader();
+    pembaca.onerror = () => gagal(new Error('Berkas tidak terbaca.'));
+    pembaca.onload = () => {
+      const img = new Image();
+      img.onerror = () => gagal(new Error('Berkas ini bukan gambar yang bisa dibaca.'));
+      img.onload = () => {
+        const skala = Math.min(1, GALERI_LEBAR_MAKS / img.naturalWidth);
+        const w = Math.round(img.naturalWidth  * skala);
+        const h = Math.round(img.naturalHeight * skala);
+        const kanvas = document.createElement('canvas');
+        kanvas.width = w; kanvas.height = h;
+        const ktx = kanvas.getContext('2d');
+        /* Latar putih dulu: PNG transparan yang diubah ke JPEG tanpa ini
+           menghasilkan latar HITAM, bukan putih. */
+        ktx.fillStyle = '#fff'; ktx.fillRect(0, 0, w, h);
+        ktx.drawImage(img, 0, 0, w, h);
+        kanvas.toBlob(b => b ? selesai({ blob: b, lebar: w, tinggi: h })
+                             : gagal(new Error('Gagal mengecilkan foto.')),
+                      'image/jpeg', GALERI_MUTU);
+      };
+      img.src = pembaca.result;
+    };
+    pembaca.readAsDataURL(berkas);
+  });
+}
+
+/* Alamat foto untuk ditampilkan. Satu-satunya tempat yang menerjemahkan baris
+   galeri jadi URL — dipakai dashboard maupun halaman publik lewat salinan yang
+   sama persis, supaya keduanya tidak pernah menampilkan hal berbeda. */
+function urlGaleri(g){
+  if (g.sumber === 'tautan') return g.url || '';
+  const { data } = DB.storage.from('galeri').getPublicUrl(g.path);
+  return (data && data.publicUrl) || '';
+}
+
+const rapiUkuran = b => b < 1024 ? b + ' B'
+  : b < 1048576 ? (b / 1024).toFixed(0) + ' KB'
+  : (b / 1048576).toFixed(1) + ' MB';
+
+async function tabGaleri(){
+  const { data, error } = await DB.from('galeri')
+    .select('id,urutan,judul,sumber,path,url,lebar,tinggi,aktif,dibuat')
+    .order('urutan', { ascending: true }).order('dibuat', { ascending: true });
+  if (error) return gagal(error);
+  const daftar = data || [];
+  const tampil = daftar.filter(g => g.aktif).length;
+
+  $('isi').innerHTML = `
+    <div class="card">
+      <h3 style="margin:0 0 4px">Galeri foto halaman utama</h3>
+      <div class="hint" style="margin-bottom:12px">${daftar.length} foto,
+        <b>${tampil}</b> ditampilkan di halaman pemesanan. Urutannya mengikuti
+        daftar di bawah &mdash; yang paling atas tampil paling kiri.</div>
+
+      <div class="grid g2" style="margin-bottom:0">
+        <div class="fld">
+          <label for="gl-berkas">Tambah dari berkas</label>
+          <input type="file" id="gl-berkas" accept="image/jpeg,image/png,image/webp">
+          <div class="hint">Pilih foto dari HP atau laptop. Otomatis dikecilkan
+            ke lebar ${GALERI_LEBAR_MAKS}px sebelum diunggah.</div>
+        </div>
+        <div class="fld">
+          <label for="gl-tautan">atau tempel tautan foto</label>
+          <input id="gl-tautan" placeholder="https://..." autocomplete="off" spellcheck="false">
+          <div class="hint">Harus alamat gambar langsung (berakhiran .jpg/.png).
+            Tautan Google Drive dan Instagram umumnya tidak bisa dipakai.</div>
+        </div>
+      </div>
+      <div class="fld">
+        <label for="gl-judul">Keterangan foto <span
+          style="font-weight:400;color:var(--muted)">(boleh dikosongkan)</span></label>
+        <input id="gl-judul" maxlength="120" autocomplete="off"
+               placeholder="mis. Berlayar pagi di Teluk Gelon">
+      </div>
+      <button type="button" class="btn" id="gl-tambah">Tambah foto</button>
+      <div class="hint" id="gl-ket" style="margin-top:9px"></div>
+
+      <div class="note"><b>Kenapa fotonya dikecilkan otomatis</b>
+        Halaman ini sering dibuka pakai data seluler. Foto apa adanya dari kamera
+        HP sekitar 3,5 MB; dikecilkan jadi sekitar 200 KB dengan tampilan yang
+        praktis sama di layar. Selain lebih cepat untuk pengunjung, ini juga yang
+        menjaga pemakaian kuota Supabase tetap di dalam jatah gratis.</div>
+    </div>
+
+    ${daftar.length ? `<div class="card">
+      <h3 style="margin:0 0 12px">Daftar foto</h3>
+      <div class="scrollx">
+      <table data-papan="galeri">
+        <thead><tr><th class="nw">Urutan</th><th class="nw">Foto</th><th>Keterangan</th>
+          <th class="nw">Sumber</th><th class="nw">Status</th><th></th></tr></thead>
+        <tbody>${daftar.map((g, i) => `<tr>
+          <td class="nw">
+            <span class="sel2">
+              <a class="aksi ghost" href="#" data-gl-naik="${g.id}"
+                 ${i === 0 ? 'style="visibility:hidden"' : ''}>&uarr;</a>
+              <a class="aksi ghost" href="#" data-gl-turun="${g.id}"
+                 ${i === daftar.length - 1 ? 'style="visibility:hidden"' : ''}>&darr;</a>
+            </span></td>
+          <td class="nw"><img src="${esc(urlGaleri(g))}" alt="" loading="lazy"
+                 style="width:92px;height:62px;object-fit:cover;border-radius:7px;
+                        border:1px solid var(--line);background:var(--bg);display:block"></td>
+          <td><span class="nama" style="max-width:260px"
+                 title="${esc(g.judul || '')}">${esc(g.judul || '—')}</span>
+              ${g.lebar ? `<div class="hint">${g.lebar}×${g.tinggi} px</div>` : ''}</td>
+          <td class="nw"><span class="pill ${g.sumber === 'unggah' ? 'p-sea' : 'p-mute'}">${
+                 g.sumber === 'unggah' ? 'BERKAS' : 'TAUTAN'}</span></td>
+          <td class="nw">${g.aktif
+                 ? '<span class="pill p-ok">TAMPIL</span>'
+                 : '<span class="pill p-mute">DISEMBUNYIKAN</span>'}</td>
+          <td class="nw"><span class="sel2">
+            <a class="aksi ghost" href="#" data-gl-judul="${g.id}">Ubah</a>
+            <a class="aksi ${g.aktif ? 'matikan' : 'hidupkan'}" href="#"
+               data-gl-aktif="${g.id}" data-nilai="${g.aktif ? 0 : 1}">${
+               g.aktif ? 'Sembunyikan' : 'Tampilkan'}</a>
+            <a class="aksi ghost" href="#" data-gl-hapus="${g.id}"
+               style="color:var(--danger)">Hapus</a></span></td>
+        </tr>`).join('')}</tbody>
+      </table>
+      </div>
+      <div class="note w"><b>Hapus tidak bisa dibatalkan</b>
+        Foto yang diunggah ikut terhapus dari penyimpanan, bukan cuma hilang dari
+        daftar. Kalau cuma ingin menyingkirkannya sementara dari halaman,
+        <strong>Sembunyikan</strong> lebih tepat.</div>
+    </div>` : `<div class="card"><div class="hint">Belum ada foto.
+        Tambahkan lewat kotak di atas &mdash; galerinya tidak akan muncul di
+        halaman pemesanan selama masih kosong.</div></div>`}`;
+
+  pasangGaleri(daftar);
+}
+
+function pasangGaleri(daftar){
+  const ket = $('gl-ket');
+  const kabar = (teks, warna) => {
+    ket.innerHTML = teks;
+    ket.style.color = warna || 'var(--muted)';
+  };
+
+  /* ---- Tambah foto ---- */
+  const tombol = $('gl-tambah');
+  tombol.onclick = async () => {
+    const berkas = $('gl-berkas').files[0];
+    const tautan = ($('gl-tautan').value || '').trim();
+    const judul  = ($('gl-judul').value  || '').trim() || null;
+
+    /* Satu sumber saja. Database juga menolaknya, tapi ditolak di sini supaya
+       orangnya tahu sebelum menunggu unggahan selesai. */
+    if (berkas && tautan)
+      return kabar('Pilih <b>salah satu</b>: berkas atau tautan, jangan dua-duanya.',
+                   'var(--warn)');
+    if (!berkas && !tautan)
+      return kabar('Pilih berkas foto, atau tempel tautannya.', 'var(--warn)');
+    if (tautan && !/^https?:\/\/\S+$/i.test(tautan))
+      return kabar('Tautan harus diawali http:// atau https://', 'var(--warn)');
+
+    tombol.disabled = true;
+    const semula = tombol.textContent;
+
+    try {
+      let baris;
+      if (tautan){
+        baris = { sumber: 'tautan', url: tautan, judul };
+      } else {
+        tombol.innerHTML = '<span class="spin"></span> Mengecilkan…';
+        const { blob, lebar, tinggi } = await kecilkanFoto(berkas);
+        kabar(`Dari ${rapiUkuran(berkas.size)} jadi ${rapiUkuran(blob.size)}`
+            + ` (${lebar}×${tinggi} px). Mengunggah…`);
+
+        tombol.innerHTML = '<span class="spin"></span> Mengunggah…';
+        /* Nama berkas dibuat sendiri, TIDAK memakai nama asli dari HP: nama
+           asli bisa memuat spasi, tanda baca, atau huruf non-ASCII yang
+           membuat URL-nya rusak, dan dua foto bernama "IMG_1234.jpg" akan
+           saling menimpa. */
+        const jalur = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+        const { error: eUp } = await DB.storage.from('galeri')
+          .upload(jalur, blob, { contentType: 'image/jpeg', upsert: false });
+        if (eUp) throw eUp;
+        baris = { sumber: 'unggah', path: jalur, judul, lebar, tinggi };
+      }
+
+      /* Ditaruh di urutan paling belakang. */
+      baris.urutan = daftar.length
+        ? Math.max(...daftar.map(g => g.urutan || 0)) + 1 : 0;
+
+      tombol.innerHTML = '<span class="spin"></span> Menyimpan…';
+      const { error } = await DB.from('galeri').insert(baris);
+      if (error){
+        /* Barisnya gagal masuk padahal berkasnya sudah naik -> berkas itu
+           dibersihkan. Kalau dibiarkan, ia memakan kuota selamanya tanpa
+           pernah muncul di daftar mana pun: tidak ada yang tahu ia ada. */
+        if (baris.path) await DB.storage.from('galeri').remove([baris.path]);
+        throw error;
+      }
+      pesan('Foto ditambahkan ke galeri.', 7000);
+      tabGaleri();
+    } catch (e){
+      tombol.disabled = false;
+      tombol.textContent = semula;
+      kabar('<b>Gagal:</b> ' + esc((e && e.message) || 'tidak diketahui'),
+            'var(--danger)');
+    }
+  };
+
+  /* ---- Naik / turun ----
+     Yang ditukar NILAI urutannya, bukan posisi di layar. Dua baris bertukar
+     angka, jadi tidak pernah ada dua foto dengan urutan sama dan tidak perlu
+     menulis ulang seluruh daftar. */
+  const tukar = async (id, arah) => {
+    const i = daftar.findIndex(g => g.id === id);
+    const j = i + arah;
+    if (i < 0 || j < 0 || j >= daftar.length) return;
+    const a = daftar[i], b = daftar[j];
+    /* Kalau keduanya kebetulan berangka sama (data lama), beri selisih dulu
+       supaya pertukaran tidak jadi operasi kosong. */
+    const ua = a.urutan ?? 0, ub = b.urutan ?? 0;
+    const [baruA, baruB] = ua === ub ? [ub + arah, ua] : [ub, ua];
+    const [r1, r2] = await Promise.all([
+      DB.from('galeri').update({ urutan: baruA }).eq('id', a.id),
+      DB.from('galeri').update({ urutan: baruB }).eq('id', b.id),
+    ]);
+    if (r1.error) return gagalPesan(r1.error);
+    if (r2.error) return gagalPesan(r2.error);
+    tabGaleri();
+  };
+  $('isi').querySelectorAll('[data-gl-naik]').forEach(t => t.onclick = e => {
+    e.preventDefault(); tukar(t.dataset.glNaik, -1); });
+  $('isi').querySelectorAll('[data-gl-turun]').forEach(t => t.onclick = e => {
+    e.preventDefault(); tukar(t.dataset.glTurun, +1); });
+
+  /* ---- Tampilkan / sembunyikan ---- */
+  $('isi').querySelectorAll('[data-gl-aktif]').forEach(t => t.onclick = async e => {
+    e.preventDefault();
+    const { error } = await DB.from('galeri')
+      .update({ aktif: t.dataset.nilai === '1' }).eq('id', t.dataset.glAktif);
+    if (error) return gagalPesan(error);
+    tabGaleri();
+  });
+
+  /* ---- Ubah keterangan ---- */
+  $('isi').querySelectorAll('[data-gl-judul]').forEach(t => t.onclick = e => {
+    e.preventDefault();
+    const g = daftar.find(x => x.id === t.dataset.glJudul);
+    if (!g) return;
+    const { q, tutup } = bukaLapis(`
+      <h3>Keterangan foto</h3>
+      <div class="fld" style="margin-bottom:0">
+        <label for="gj-teks">Keterangan <span
+          style="font-weight:400;color:var(--muted)">(boleh dikosongkan)</span></label>
+        <input id="gj-teks" maxlength="120" value="${esc(g.judul || '')}"
+               placeholder="mis. Berlayar pagi di Teluk Gelon">
+        <div class="hint">Muncul di bawah foto pada halaman pemesanan.</div>
+      </div>
+      <div class="aksi-bar">
+        <button type="button" class="btn ghost gj-batal">Batal</button>
+        <button type="button" class="btn gj-simpan">Simpan</button>
+      </div>`, true);
+    q('.gj-batal').onclick = tutup;
+    const inp = q('#gj-teks'); inp.focus(); inp.select();
+    q('.gj-simpan').onclick = async () => {
+      const { error } = await DB.from('galeri')
+        .update({ judul: (inp.value || '').trim() || null }).eq('id', g.id);
+      if (error) return gagalPesan(error);
+      tutup(); tabGaleri();
+    };
+  });
+
+  /* ---- Hapus ---- */
+  $('isi').querySelectorAll('[data-gl-hapus]').forEach(t => t.onclick = e => {
+    e.preventDefault();
+    const g = daftar.find(x => x.id === t.dataset.glHapus);
+    if (!g) return;
+    const { q, tutup } = bukaLapis(`
+      <h3>Hapus foto ini?</h3>
+      <img src="${esc(urlGaleri(g))}" alt="" style="width:100%;max-height:210px;
+           object-fit:cover;border-radius:9px;margin:4px 0 12px">
+      <div class="note w" style="margin-top:0"><b>Tidak bisa dibatalkan</b>
+        ${g.sumber === 'unggah'
+          ? 'Berkasnya ikut terhapus dari penyimpanan, bukan cuma hilang dari daftar.'
+          : 'Barisnya dihapus dari daftar. Foto aslinya di internet tidak tersentuh.'}
+        Kalau cuma ingin menyingkirkannya sementara, <strong>Sembunyikan</strong>
+        lebih tepat &mdash; itu bisa dibatalkan kapan saja.</div>
+      <div class="aksi-bar">
+        <button type="button" class="btn ghost gh-batal">Batal</button>
+        <button type="button" class="btn gh-ya" style="background:var(--danger);
+          border-color:var(--danger)">Hapus foto</button>
+      </div>`, true);
+    q('.gh-batal').onclick = tutup;
+    q('.gh-ya').onclick = async () => {
+      const tb = q('.gh-ya');
+      tb.disabled = true; tb.innerHTML = '<span class="spin"></span> Menghapus…';
+      /* Baris dulu, berkas kemudian. Kalau urutannya dibalik dan penghapusan
+         baris gagal, daftarnya menunjuk ke berkas yang sudah tidak ada —
+         galeri menampilkan gambar rusak. Sebaliknya, baris hilang tapi berkas
+         tertinggal cuma memakan sedikit kuota dan tidak terlihat siapa pun. */
+      const { error } = await DB.from('galeri').delete().eq('id', g.id);
+      if (error){ tb.disabled = false; tb.textContent = 'Hapus foto';
+                  return gagalPesan(error); }
+      if (g.sumber === 'unggah' && g.path)
+        await DB.storage.from('galeri').remove([g.path]);
+      tutup();
+      pesan('Foto dihapus dari galeri.', 6000);
+      tabGaleri();
+    };
+  });
 }
 
 async function tabAkses(){

@@ -799,7 +799,15 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
      rata tengah DI DALAM KOTAK ITU — bukan di tengah halaman. Hasilnya
      meleset 509 px ke kiri. Ini pernah lolos sekali; pemeriksanya sekarang
      ada di bawah supaya tidak terulang. */
-  #form-area,#hasil,.judul-bag,.sub{max-width:1120px}
+  /* #produk IKUT dibatasi sejak 9 Nov 2026. Sebelumnya ia satu-satunya yang
+     tidak dibatasi, jadi di layar lebar deretan kartu paket melebar sampai
+     1644 px sementara judul "Paket perjalanan" tepat di atasnya berhenti di
+     1120 px — kartunya menjorok keluar dari judulnya sendiri.
+
+     Jumlah kartu per baris TIDAK berubah. Gridnya auto-fit minmax(230px):
+     pada 1120 px muat 4 kolom, dan produknya memang 4. Yang berubah cuma
+     kartunya jadi lebih ramping, bukan jumlah barisnya. */
+  #form-area,#hasil,.judul-bag,.sub,#produk{max-width:1120px}
 }
 
 /* ====================================================================
@@ -1096,6 +1104,12 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
       <div class="fld">
         <label for="bkode">Kode agen <span class="gerbang-buka sembunyi">(opsional)</span></label>
         <input id="bkode" class="mono" placeholder="mis. BUDI2026" autocomplete="off" spellcheck="false">
+        <!-- Tulisannya BERBEDA per keadaan gerbang, diisi terapkanGerbang().
+             Nilai di markup ini yang dipakai kalau gerbangnya tertutup, dan
+             juga yang terlihat sekejap sebelum gerbang_pesan() terjawab. Yang
+             dipilih untuk markup sengaja versi TERTUTUP: menampilkan
+             "opsional" dulu lalu berubah jadi wajib akan terasa seperti
+             fitur yang dicabut; sebaliknya cuma terasa seperti terbuka. -->
         <div class="hint" id="bkode-ket">Tekan Enter atau klik Periksa.</div>
       </div>
       <button type="button" class="btn" id="bcek">Periksa kode</button>
@@ -1504,6 +1518,19 @@ async function muat(){
   } catch { S.gerbangBuka = false; }
   if (S.gerbangBuka) S.kodeOk = true;
   terapkanGerbang();
+
+  /* Tulisan bantuan kolom kode. SENGAJA di sini, BUKAN di terapkanGerbang():
+     fungsi itu dipanggil lagi di akhir cekKodeAgen(), tepat sesudah #bkode-ket
+     diisi hasil pemeriksaan ("SAH atas nama …" / "DITOLAK …"). Kalau diatur di
+     sana, hasil yang baru saja ditulis langsung tertimpa kalimat bantuan dan
+     orangnya tidak pernah tahu kodenya diterima atau tidak.
+
+     "Tekan Enter atau klik Periksa" itu kalimat perintah, sisa dari masa kode
+     masih wajib. Di jalur terbuka ia bertabrakan dengan label "(opsional)" —
+     satu menyuruh, satu mempersilakan. Gayanya disamakan dengan kolom voucher
+     di bawahnya, yang memang sudah opsional sejak awal. */
+  if (S.gerbangBuka && $('bkode-ket'))
+    $('bkode-ket').textContent = 'Kosongkan saja kalau tidak punya.';
 
   /* Tautan agen (?ref=KODE): isi kolomnya dan periksa otomatis, supaya pelanggan
      tidak perlu mengetik ulang kode yang sudah ada di tautannya. */

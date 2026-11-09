@@ -1263,6 +1263,10 @@ function dataLatihan(){
       komisi_atas_persen:'10.00', retroaktif:true, periode_reset:'bulanan', komisi_dari:'bruto',
       ambang_cek_boarding:10, lb_agen_mode:'penuh', retensi_nik_bulan:12,
       nik_siapa_boleh_lihat:'super', kuota_kursi:null, kapasitas_izin:null, tahan_pending_jam:2,
+      /* Ikut didaftarkan supaya saklarnya punya nilai di mode latihan juga.
+         Tanpa baris ini data[k] undefined, String(!!undefined) = 'false', dan
+         saklarnya selalu tampil "Mati" di panduan — mengajarkan hal yang salah. */
+      tanpa_agen_aktif:true, dp_aktif:true, dp_minimum_persen:'30.00',
       kolom_manifest:{nama:true,gender:true,usia:true,nik:true,alamat:true,wn:false} }],
     /* Katalog produk. Sebelum 15 Okt 2026 tabel ini TIDAK ada di data latihan,
        jadi kartu Produk & Harga akan kosong melompong saat mode panduan.
@@ -5913,6 +5917,15 @@ async function tabAtur(){
     <select id="set_${k}" ${ro?'disabled':''}>${opsi.map(([v,t])=>
       `<option value="${v}" ${data[k]===v?'selected':''}>${t}</option>`).join('')}</select>
     ${hint?`<div class="hint">${hint}</div>`:''}</div>`;
+  /* Saklar untuk kolom BOOLEAN. Tidak boleh memakai pil(): di sana
+     perbandingannya data[k] === v, yaitu boolean lawan teks — 'true' === true
+     selalu false, jadi tidak ada pilihan yang pernah tampil terpilih dan
+     layarnya selalu memperlihatkan pilihan pertama apa pun isi database.
+     Diamnya itu yang berbahaya: orang mengira saklarnya mati padahal hidup. */
+  const sak = (k,l,opsi,hint='') => `<div class="fld"><label>${l}</label>
+    <select id="set_${k}" ${ro?'disabled':''}>${opsi.map(([v,t])=>
+      `<option value="${v}" ${String(!!data[k])===v?'selected':''}>${t}</option>`).join('')}</select>
+    ${hint?`<div class="hint">${hint}</div>`:''}</div>`;
 
   $('isi').innerHTML = `
     ${ro?'<div class="note w"><b>Hanya bisa dilihat</b>Pengaturan hanya bisa diubah Super Admin.</div>':''}
@@ -5927,6 +5940,19 @@ async function tabAtur(){
         '⬜ Belum kamu putuskan. Sementara: bruto')}
       ${pil('periode_reset','Reset tier',
         [['bulanan','Bulanan'],['per_event','Per event'],['all_time','All-time']])}
+    </div></div>
+    <div class="card"><h3>Jalur pemesanan</h3>
+      <div class="note"><b>Dua jalur bisa hidup bersamaan.</b>
+        Pelanggan yang dibawa agen tetap mengisi kode agen, dan komisinya jalan
+        seperti biasa. Pelanggan yang datang sendiri memesan tanpa kode; pesanannya
+        dicatat atas agen internal <b>LANGSUNG</b> yang <b>tidak menghasilkan komisi</b>
+        untuk siapa pun, dan konfirmasinya diarahkan ke nomor WhatsApp pusat.
+        Kode yang SALAH KETIK tetap ditolak &mdash; tidak diam-diam berubah jadi
+        pesanan langsung, supaya komisi agen tidak hilang karena satu huruf.</div>
+      <div class="grid g3" style="margin-bottom:0">
+      ${sak('tanpa_agen_aktif','Pesanan tanpa kode agen',
+        [['false','Mati — kode agen wajib'],['true','Hidup — kode jadi opsional']],
+        'Halaman pemesanan langsung ikut berubah begitu disimpan, tanpa deploy ulang.')}
     </div></div>
     <div class="card"><h3>Boarding &amp; Kapal</h3><div class="grid g3" style="margin-bottom:0">
       ${f('ambang_cek_boarding','Ambang cek per nama',
@@ -6002,6 +6028,10 @@ async function tabAtur(){
     });
     ['komisi_dari','periode_reset','lb_agen_mode','nik_siapa_boleh_lihat']
       .forEach(k=> isi[k]=$('set_'+k).value);
+    /* Kolom boolean dikirim sebagai boolean, bukan teks. value selalu String,
+       dan 'false' itu nilai yang truthy — menyimpannya apa adanya akan
+       MENYALAKAN saklar justru ketika orangnya memilih "Mati". */
+    ['tanpa_agen_aktif'].forEach(k=> isi[k] = $('set_'+k).value === 'true');
     isi.diubah = new Date().toISOString();
     const { error } = await DB.from('pengaturan').update(isi).eq('id',true);
     b.disabled=false; b.textContent='Simpan pengaturan';

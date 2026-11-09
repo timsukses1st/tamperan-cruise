@@ -771,7 +771,18 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
   .bar a,#tombol-tutor,#tombol-konsul{background:rgba(8,29,51,.6);
     -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
   .hero{margin-top:0}
-  .hero .wrap{padding:40px 38px 36px;max-width:1120px}
+  /* margin-left/right DIKEMBALIKAN KE 0. ".wrap" dasar punya "margin:0 auto",
+     dan di sini .hero .wrap dibatasi 1120 px sementara kolomnya jauh lebih
+     lebar — sisanya dibagi dua oleh margin auto, jadi teks hero terdorong ke
+     kanan sejauh (lebar kolom - 1120) / 2. Besarnya IKUT LEBAR LAYAR: di
+     1440 px cuma 22 px, di 1920 px sudah 262 px. Itu sebabnya hero terasa
+     mengambang — letaknya tidak tetap terhadap apa pun di bawahnya.
+     Diukur di 1920 px: teks hero 548, sedangkan seluruh isi halaman 256/275.
+
+     Inset 38 -> 18 px menyamai .card{padding:18px}. Hero memang sebuah kartu
+     selebar kolom, jadi isinya sekarang duduk di 275 px — satu garis dengan
+     isi kartu paket dan kartu formulir. */
+  .hero .wrap{padding:40px 18px 36px;max-width:1120px;margin-left:0;margin-right:0}
   .band .g2{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
   /* Batas 1120 px dipasang supaya baris teks formulir tidak terlalu panjang
      untuk dibaca. Semuanya rata KIRI, sejajar dengan tepi kiri kartu paket
@@ -802,7 +813,7 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
    ==================================================================== */
 @media (min-width:980px){
   .hero{margin-bottom:14px}
-  .hero .wrap{padding:30px 38px 26px}
+  .hero .wrap{padding:30px 18px 26px}
   /* 52 -> 46 px. Judulnya tetap tiga baris, cuma barisnya lebih pendek. */
   .hero h1{font-size:clamp(30px,5.4vw,46px);margin-bottom:12px}
   .hero p{margin-bottom:18px}
@@ -820,7 +831,10 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
    tinggi layarnya, dan laptop 1366x768 lebarnya cukup tapi tingginya tidak.
    Tanpa blok ini, di 768p kartu paket masih terpotong ~91 px. */
 @media (min-width:980px) and (max-height:860px){
-  .hero .wrap{padding:22px 34px 20px}
+  /* Inset mendatar tetap 18 px. Blok ini cuma memangkas tinggi; kalau di sini
+     dibiarkan 34 px, teks hero bergeser sendiri 16 px di laptop berlayar
+     pendek sementara isi halaman lain tidak ikut bergeser. */
+  .hero .wrap{padding:22px 18px 20px}
   .hero h1{font-size:clamp(28px,4.2vw,38px);margin-bottom:9px}
   .hero p{font-size:15.5px;margin-bottom:14px}
   .hero .tagline{margin-bottom:9px;padding:4px 11px;font-size:11px}

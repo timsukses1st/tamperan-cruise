@@ -799,23 +799,33 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
      rata tengah DI DALAM KOTAK ITU — bukan di tengah halaman. Hasilnya
      meleset 509 px ke kiri. Ini pernah lolos sekali; pemeriksanya sekarang
      ada di bawah supaya tidak terulang. */
-  /* SATU BATAS LEBAR UNTUK SELURUH ISI HALAMAN.
+  /* SATU LEBAR UNTUK SELURUH ISI HALAMAN — sekarang selebar kolomnya.
 
-     DAFTAR INI HARUS DIPERBARUI setiap ada blok tingkat atas yang baru.
-     Sejarahnya membuktikan kenapa: 9 Nov 2026 #produk ditambahkan ke sini
-     karena deretan kartu paket melebar sampai 1629 px sementara judul tepat
-     di atasnya berhenti di 1120 px. Begitu kartunya mengecil, DUA blok lain
-     yang selama ini juga 1629 px langsung jadi kentara — #bagian-galeri dan
-     #cek-form. Keduanya sudah salah sejak awal, cuma tidak terlihat selama
-     ada blok lebar lain di dekatnya yang menyamarkannya.
+     Riwayatnya, supaya tidak ada yang mengembalikan setengah-setengah:
+       - semula 1120 px, dengan alasan baris teks formulir jangan terlalu
+         panjang untuk dibaca;
+       - #produk dulu TIDAK ikut dibatasi, jadi deretan kartu paket melebar
+         sampai 1629 px sementara judul tepat di atasnya berhenti di 1120 px;
+       - #produk ikut dibatasi, lalu tiga blok lain yang juga 1629 px langsung
+         kentara (#bagian-galeri, #cek-form, #cek-status) — ketiganya memang
+         sudah salah sejak awal, cuma tersamarkan;
+       - 9 Nov 2026 Mas Dik memilih arah sebaliknya: isi halaman dilebarkan
+         sampai tepi kanan, sejajar dengan kartu hero di atasnya.
 
-     Jumlah kartu paket per baris TIDAK berubah oleh batas ini. Gridnya
-     auto-fit minmax(230px): pada 1120 px muat 4 kolom, dan produknya 4.
-     Galeri tetap bergeser mendatar, cuma bingkainya ikut 1120 px.
+     YANG PENTING: nilainya boleh berubah, tapi semua baris di sini harus
+     berubah BERSAMAAN. Membatasi sebagian saja persis yang melahirkan
+     keanehan di atas.
+
+     Soal panjang baris: yang perlu dijaga tinggal teks mengalir, dan itu
+     sudah dijaga di tempatnya masing-masing (.hero p dibatasi 54ch). Kolom
+     formulir aman karena .g2 memakai auto-fit — jumlah kolomnya mengikuti
+     JUMLAH ISI, bukan lebar wadah, jadi dua kolom tetap dua kolom, cuma
+     masing-masing lebih lega. Kartu paket yang berisi 4 ikut melebar jadi 4
+     kolom yang lebih besar, bukan pecah jadi 6.
 
      footer SENGAJA TIDAK ikut — alasannya di komentar bawah. */
   #form-area,#hasil,.judul-bag,.sub,#produk,
-  #bagian-galeri,#cek-form,#cek-status{max-width:1120px}
+  #bagian-galeri,#cek-form,#cek-status{max-width:none}
 }
 
 /* ====================================================================

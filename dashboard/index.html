@@ -1515,6 +1515,37 @@ function rpcLatihan(nama, arg = {}){
       return null;
     },
 
+    /* Aturannya ditiru dari ubah_tanggal_berangkat() di database, bukan
+       disederhanakan. Mode latihan yang lebih longgar daripada aslinya
+       mengajarkan kebiasaan yang nanti ditolak di pekerjaan sungguhan. */
+    ubah_tanggal_berangkat: () => {
+      if (!['super','owner','admin'].includes(S.peran))
+        throw { code:'42501', message:'Hanya admin atau super admin yang boleh '
+                                    + 'memindah tanggal keberangkatan.' };
+      const o = P.find(x => x.kode === arg.p_kode);
+      if (!o) throw { code:'22023', message:`Pesanan ${arg.p_kode} tidak ditemukan.` };
+      if (o.status === 'boarded')
+        throw { code:'22023', message:`Pesanan ${o.kode} sudah berangkat, tanggalnya `
+                                    + 'tidak bisa dipindah.' };
+      if (!['pending','waiting','paid'].includes(o.status))
+        throw { code:'22023', message:`Pesanan berstatus ${o.status} tidak bisa dijadwal `
+                                    + 'ulang. Hidupkan dulu pesanannya.' };
+      const hari = new Date(); hari.setHours(0,0,0,0);
+      const baru = new Date(arg.p_tanggal + 'T00:00:00');
+      if (!arg.p_tanggal) throw { code:'22023', message:'Tanggal baru wajib diisi.' };
+      if (baru < hari)    throw { code:'22023', message:'Tanggal baru sudah lewat.' };
+      const batas = new Date(hari); batas.setFullYear(batas.getFullYear() + 1);
+      if (baru > batas)
+        throw { code:'22023', message:'Tanggal baru terlalu jauh (maksimal setahun '
+                                    + 'dari sekarang).' };
+      if (o.tanggal_berangkat === arg.p_tanggal) return [{ r_kapal_dilepas:false }];
+      const adaKapal = !!o.kapal_id;
+      o.tanggal_berangkat = arg.p_tanggal;
+      o.kapal_id = null; o.kapal = null;      /* kapal dilepas, sama seperti aslinya */
+      o.diubah = new Date().toISOString();
+      return [{ r_kapal_dilepas: adaKapal }];
+    },
+
     ubah_status_pesanan: () => {
       const o = P.find(x => x.kode === arg.p_kode);
       if (!o) return null;
@@ -2622,7 +2653,7 @@ async function tabPesanan(){
               ? `${tgl(o.tanggal_berangkat)}${o.kapal?.nama
                    ? ` <span class="pill p-sea">${esc(o.kapal.nama.replace(/^Kapal\s*/i,'K'))}</span>`
                    : ' <span class="pill p-warn">belum</span>'}`
-              : '<span style="color:var(--muted)">—</span>'}</td>
+              : '<span style="color:var(--muted)">—</span>'}${aksiJadwal(o)}</td>
             <td class="nw"><span class="nama" title="${esc(o.pemesan_nama)}">${esc(o.pemesan_nama)}</span>${
               o.tipe==='biro'?' <span class="pill p-sea">BIRO</span>':''}${
               o.kode_voucher_beku?' <span class="pill p-ok">VOUCHER</span>':''}${
@@ -2708,6 +2739,22 @@ function selBayar(o, rb){
   return o.deposit_jam
     ? `<div class="hint" style="text-align:right"><span class="pill p-sea">PORSI KE DEPOSIT</span></div>`
     : '';
+}
+
+/* ---- Pindah tanggal keberangkatan (reschedule) ----
+   Tombolnya hanya muncul untuk keadaan yang database memang mengizinkan.
+   Daftar status di sini WAJIB sama dengan yang dijaga ubah_tanggal_berangkat():
+   menampilkan tombol yang pasti ditolak server cuma memindahkan kekecewaan ke
+   satu klik berikutnya. Database tetap memeriksa ulang — penyembunyian di sini
+   bukan penjagaan, cuma kesopanan. */
+const BOLEH_JADWAL_ULANG = ['pending','waiting','paid'];
+function aksiJadwal(o){
+  if (!BOLEH_UBAH_STATUS.includes(S.peran)) return '';
+  if (!BOLEH_JADWAL_ULANG.includes(o.status)) return '';
+  return ` <a class="aksi ghost" href="#" data-jadwal="${esc(o.kode)}"
+     data-tgl="${esc(o.tanggal_berangkat || '')}"
+     data-kapal="${esc(o.kapal?.nama || '')}"
+     title="Pindah tanggal keberangkatan">Pindah</a>`;
 }
 
 function aksiStatus(o){
@@ -2867,6 +2914,12 @@ function pasangAksiUang(muatUlang){
     await popPorsi(t.dataset.porsi, muatUlang);
   });
 
+  /* ---- Pindah tanggal keberangkatan ---- */
+  $('isi').querySelectorAll('[data-jadwal]').forEach(t => t.onclick = e => {
+    e.preventDefault();
+    popJadwal(t.dataset.jadwal, t.dataset.tgl, t.dataset.kapal, muatUlang);
+  });
+
   /* ---- DP batal -> deposit ---- */
   $('isi').querySelectorAll('[data-dpbatal]').forEach(t => t.onclick = e => {
     e.preventDefault();
@@ -2896,6 +2949,89 @@ function dpPersen(nominal, total){
 function dpRupiah(persen, total){
   if (!total || !(persen > 0)) return null;
   return Math.ceil(total * persen / 100);
+}
+
+/* ====================================================================
+   PINDAH TANGGAL KEBERANGKATAN (reschedule)
+   --------------------------------------------------------------------
+   Lewat ubah_tanggal_berangkat(), BUKAN update tabel biasa. RLS
+   pesanan_fu_agen memberi agen hak UPDATE pada barisnya sendiri dan GRANT
+   kolomnya mencakup tanggal_berangkat, jadi update langsung dari sini akan
+   melewati semua aturan status dan batas tanggal yang ada di fungsi itu.
+
+   Kapal DILEPAS otomatis setiap tanggal berubah. Peringatannya ditulis
+   sebelum tombol ditekan, bukan sesudah — orang yang baru tahu kapalnya
+   hilang setelah menekan tombol akan mengira sistemnya rusak.
+   ==================================================================== */
+function popJadwal(kode, tglSekarang, kapalNama, muatUlang){
+  /* Batas kolom tanggal disamakan dengan yang dijaga database. Kalau di sini
+     lebih longgar, orang bisa memilih tanggal yang pasti ditolak server. */
+  const hariIni = new Date();
+  hariIni.setMinutes(hariIni.getMinutes() - hariIni.getTimezoneOffset());
+  const min = hariIni.toISOString().slice(0, 10);
+  const setahun = new Date(hariIni);
+  setahun.setFullYear(setahun.getFullYear() + 1);
+
+  const { q, tutup } = bukaLapis(`
+    <h3>Pindah tanggal ${esc(kode)}</h3>
+    <div class="hint" style="margin-bottom:12px">Berangkat sekarang:
+      <b>${tglSekarang ? tgl(tglSekarang) : 'belum ditentukan'}</b>${
+      kapalNama ? ` &middot; ${esc(kapalNama)}` : ''}</div>
+
+    <div class="fld">
+      <label for="jd-tgl">Tanggal keberangkatan baru</label>
+      <input id="jd-tgl" type="date" value="${esc(tglSekarang || '')}"
+             min="${min}" max="${setahun.toISOString().slice(0,10)}">
+      <div class="hint">Paling cepat hari ini, paling jauh setahun ke depan.</div>
+    </div>
+
+    <div class="fld">
+      <label for="jd-alasan">Alasan <span style="font-weight:400;color:var(--muted)">(opsional)</span></label>
+      <input id="jd-alasan" autocomplete="off" placeholder="mis. cuaca buruk, diminta pemesan">
+      <div class="hint">Ikut tersimpan di audit log bersama nama Anda.</div>
+    </div>
+
+    ${kapalNama ? `<div class="note w"><b>Kapal ${esc(kapalNama)} akan dilepas</b>
+      Pembagian kapal dikelompokkan per tanggal, jadi kapal ini hampir pasti
+      tidak berlayar di tanggal yang baru. Pesanan kembali bertanda
+      <b>belum</b> dan perlu dibagi ulang di tab Pembagian Kapal.</div>`
+     : `<div class="note">Pesanan ini belum punya kapal, jadi tidak ada yang
+      perlu dibagi ulang setelah tanggalnya pindah.</div>`}
+
+    <div class="aksi-bar">
+      <button type="button" class="btn ghost jd-tutup">Batal</button>
+      <button type="button" class="btn jd-simpan">Pindahkan</button>
+    </div>`);
+
+  q('.jd-tutup').onclick = tutup;
+  const inp = q('#jd-tgl');
+  inp.focus();
+
+  q('.jd-simpan').onclick = async () => {
+    const baru = inp.value;
+    if (!baru) return pesan('Pilih dulu tanggal barunya.', 7000);
+    if (baru === tglSekarang) return pesan('Tanggalnya sama dengan yang sekarang.', 7000);
+
+    const b = q('.jd-simpan');
+    b.disabled = true; b.innerHTML = '<span class="spin"></span> Memindahkan…';
+    const { data, error } = await DB.rpc('ubah_tanggal_berangkat', {
+      p_kode: kode, p_tanggal: baru, p_alasan: q('#jd-alasan').value.trim() || null
+    });
+    if (error){
+      b.disabled = false; b.textContent = 'Pindahkan';
+      return gagalPesan(error);
+    }
+    /* Fungsinya mengembalikan satu baris: kapal benar-benar dilepas atau tidak.
+       Dipakai supaya kabarnya sesuai kenyataan, bukan menebak dari nama kapal
+       yang tadi ditampilkan — pesanan bisa saja sudah berubah di sela-sela. */
+    const r = Array.isArray(data) ? data[0] : data;
+    tutup();
+    pesan(`<b>${esc(kode)}</b> dipindah ke ${tgl(baru)}.${
+      r && r.r_kapal_dilepas
+        ? ' Kapalnya dilepas &mdash; perlu dibagi ulang di tab Pembagian Kapal.'
+        : ''} Tercatat di audit atas nama Anda.`, 10000);
+    muatUlang();
+  };
 }
 
 async function popDp(kode, total, dpSekarang, muatUlang){

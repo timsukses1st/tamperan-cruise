@@ -799,15 +799,23 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
      rata tengah DI DALAM KOTAK ITU — bukan di tengah halaman. Hasilnya
      meleset 509 px ke kiri. Ini pernah lolos sekali; pemeriksanya sekarang
      ada di bawah supaya tidak terulang. */
-  /* #produk IKUT dibatasi sejak 9 Nov 2026. Sebelumnya ia satu-satunya yang
-     tidak dibatasi, jadi di layar lebar deretan kartu paket melebar sampai
-     1644 px sementara judul "Paket perjalanan" tepat di atasnya berhenti di
-     1120 px — kartunya menjorok keluar dari judulnya sendiri.
+  /* SATU BATAS LEBAR UNTUK SELURUH ISI HALAMAN.
 
-     Jumlah kartu per baris TIDAK berubah. Gridnya auto-fit minmax(230px):
-     pada 1120 px muat 4 kolom, dan produknya memang 4. Yang berubah cuma
-     kartunya jadi lebih ramping, bukan jumlah barisnya. */
-  #form-area,#hasil,.judul-bag,.sub,#produk{max-width:1120px}
+     DAFTAR INI HARUS DIPERBARUI setiap ada blok tingkat atas yang baru.
+     Sejarahnya membuktikan kenapa: 9 Nov 2026 #produk ditambahkan ke sini
+     karena deretan kartu paket melebar sampai 1629 px sementara judul tepat
+     di atasnya berhenti di 1120 px. Begitu kartunya mengecil, DUA blok lain
+     yang selama ini juga 1629 px langsung jadi kentara — #bagian-galeri dan
+     #cek-form. Keduanya sudah salah sejak awal, cuma tidak terlihat selama
+     ada blok lebar lain di dekatnya yang menyamarkannya.
+
+     Jumlah kartu paket per baris TIDAK berubah oleh batas ini. Gridnya
+     auto-fit minmax(230px): pada 1120 px muat 4 kolom, dan produknya 4.
+     Galeri tetap bergeser mendatar, cuma bingkainya ikut 1120 px.
+
+     footer SENGAJA TIDAK ikut — alasannya di komentar bawah. */
+  #form-area,#hasil,.judul-bag,.sub,#produk,
+  #bagian-galeri,#cek-form,#cek-status{max-width:1120px}
 }
 
 /* ====================================================================

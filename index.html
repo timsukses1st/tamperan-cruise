@@ -994,28 +994,24 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
         <span class="spin"></span> Memuat…</div>
     </div>
 
-    <!-- ============ GALERI ============
-         Diletakkan SESUDAH paket dan SEBELUM formulir: pengunjung melihat bukti
-         perjalanannya dulu, baru memesan. Ditaruh di dalam .band yang sama
-         dengan paket supaya latar gelapnya menyambung — foto terlihat lebih
-         hidup di atas latar gelap daripada di atas putih.
+    <!-- ============ BARIS GAMBAR ============
+         Diletakkan SESUDAH paket dan SEBELUM formulir, di dalam .band yang sama
+         supaya latar gelapnya menyambung — gambar terlihat lebih hidup di atas
+         latar gelap daripada di atas putih.
 
-         Seluruh bagian ini TERSEMBUNYI selama galerinya kosong, bukan tampil
-         sebagai kotak kosong berjudul "Galeri". Halaman yang menjanjikan
-         sesuatu lalu tidak menunjukkan apa-apa lebih buruk daripada halaman
-         yang tidak menjanjikannya. -->
+         TANPA JUDUL, dan itu disengaja. Slot ini rencananya untuk promo flyer
+         (permintaan Kak Mer); foto-foto rombongan cuma pengisi sementara sampai
+         flyernya siap. Judul "Perjalanan sebelumnya" dihapus karena akan salah
+         begitu isinya berganti jadi flyer — dan judul yang salah lebih buruk
+         daripada tanpa judul.
+
+         Sumber isinya tetap tabel galeri: flyer nanti tinggal diunggah lewat
+         Pengaturan → Galeri foto seperti foto biasa, tidak perlu kode baru.
+
+         Seluruh bagian ini TERSEMBUNYI selama isinya kosong, bukan tampil
+         sebagai kotak kosong. -->
     <div id="bagian-galeri" class="sembunyi">
-      <div class="judul-bag" id="galeri" style="margin-top:34px">
-        <span class="lenc" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-            stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="5" width="18" height="14" rx="2.5"/>
-            <circle cx="8.5" cy="10" r="1.6"/><path d="m4 17 5-4.5 4 3.5 3-2.5 4 3.5"/></svg></span>
-        <h2>Perjalanan sebelumnya</h2>
-      </div>
-      <p class="sub">Foto-foto dari rombongan yang sudah berlayar bersama kami.</p>
-
-      <div class="galeri-bingkai">
+      <div class="galeri-bingkai" style="margin-top:30px">
         <button type="button" class="galeri-nav kiri" id="gal-kiri"
                 aria-label="Geser ke kiri">&#8249;</button>
         <div class="galeri-rel" id="gal-rel"></div>

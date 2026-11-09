@@ -779,10 +779,17 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
      mengambang — letaknya tidak tetap terhadap apa pun di bawahnya.
      Diukur di 1920 px: teks hero 548, sedangkan seluruh isi halaman 256/275.
 
-     Inset 38 -> 18 px menyamai .card{padding:18px}. Hero memang sebuah kartu
-     selebar kolom, jadi isinya sekarang duduk di 275 px — satu garis dengan
-     isi kartu paket dan kartu formulir. */
-  .hero .wrap{padding:40px 18px 36px;max-width:1120px;margin-left:0;margin-right:0}
+     Inset mendatar 51 px, ANGKANYA BUKAN KIRA-KIRA: halaman ini sudah punya
+     kolom teks sendiri lewat ".judul-bag + .sub{margin-left:51px}", yaitu
+     lebar ikon judul (38) + jaraknya (13). Jadi teks hero jatuh di 307 px,
+     satu garis lurus dengan "Paket perjalanan", "Pesan tempat", dan semua
+     keterangan di bawahnya.
+
+     Percobaan sebelumnya memakai 18 px (menyamai .card{padding:18px}) supaya
+     sejajar ISI kartu. Hasilnya malah lebih aneh: teks hero jadi 275 px,
+     menjorok sendirian ke kiri dari semua judul yang terlihat di layar.
+     Yang dilihat mata di sini judul-judulnya, bukan isi kartu. */
+  .hero .wrap{padding:40px 51px 36px;max-width:1120px;margin-left:0;margin-right:0}
   .band .g2{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
   /* Batas 1120 px dipasang supaya baris teks formulir tidak terlalu panjang
      untuk dibaca. Semuanya rata KIRI, sejajar dengan tepi kiri kartu paket
@@ -813,7 +820,7 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
    ==================================================================== */
 @media (min-width:980px){
   .hero{margin-bottom:14px}
-  .hero .wrap{padding:30px 18px 26px}
+  .hero .wrap{padding:30px 51px 26px}
   /* 52 -> 46 px. Judulnya tetap tiga baris, cuma barisnya lebih pendek. */
   .hero h1{font-size:clamp(30px,5.4vw,46px);margin-bottom:12px}
   .hero p{margin-bottom:18px}
@@ -831,10 +838,10 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
    tinggi layarnya, dan laptop 1366x768 lebarnya cukup tapi tingginya tidak.
    Tanpa blok ini, di 768p kartu paket masih terpotong ~91 px. */
 @media (min-width:980px) and (max-height:860px){
-  /* Inset mendatar tetap 18 px. Blok ini cuma memangkas tinggi; kalau di sini
-     dibiarkan 34 px, teks hero bergeser sendiri 16 px di laptop berlayar
-     pendek sementara isi halaman lain tidak ikut bergeser. */
-  .hero .wrap{padding:22px 18px 20px}
+  /* Inset mendatar tetap 51 px. Blok ini cuma memangkas TINGGI; kalau di sini
+     dibiarkan 34 px, teks hero bergeser sendiri di laptop berlayar pendek
+     sementara judul-judul di bawahnya tidak ikut bergeser. */
+  .hero .wrap{padding:22px 51px 20px}
   .hero h1{font-size:clamp(28px,4.2vw,38px);margin-bottom:9px}
   .hero p{font-size:15.5px;margin-bottom:14px}
   .hero .tagline{margin-bottom:9px;padding:4px 11px;font-size:11px}
@@ -1070,19 +1077,35 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
 
   <div id="form-area">
 
-    <!-- ============ GERBANG KODE AGEN ============
-         Semua pelanggan datang lewat agen; tidak ada jalur organik. Kode
-         diperiksa di sini, dan diwajibkan lagi oleh database saat menyimpan. -->
+    <!-- ============ KODE AGEN ============
+         DUA KEADAAN, ditentukan saklar tanpa_agen_aktif di database dan
+         dibaca lewat gerbang_pesan():
+
+           tertutup — seperti semula: formulir terkunci sampai kode agen
+             terbukti sah. Teks dan tombolnya memakai varian .gerbang-tutup.
+           terbuka  — kode jadi OPSIONAL. Formulir terbuka sejak awal;
+             yang mengisi kode tetap tercatat atas agennya, yang tidak
+             mengisi tercatat sebagai pesanan langsung.
+
+         Keduanya hidup dalam satu markup, bukan dua halaman, supaya saklar
+         bisa dibalik tanpa deploy ulang. Teks yang berbeda ditandai kelas
+         .gerbang-tutup / .gerbang-buka, dan terapkanGerbang() yang memilih
+         mana yang tampil. Database tetap memeriksa ulang saat menyimpan —
+         saklar di sini cuma mengatur tampilan. -->
     <div class="card" id="gate">
       <div class="fld">
-        <label for="bkode">Kode agen</label>
+        <label for="bkode">Kode agen <span class="gerbang-buka sembunyi">(opsional)</span></label>
         <input id="bkode" class="mono" placeholder="mis. BUDI2026" autocomplete="off" spellcheck="false">
         <div class="hint" id="bkode-ket">Tekan Enter atau klik Periksa.</div>
       </div>
       <button type="button" class="btn" id="bcek">Periksa kode</button>
-      <div class="note"><b>Belum punya kode?</b>
+      <div class="note gerbang-tutup"><b>Belum punya kode?</b>
         Pemesanan di The Tamperan Cruise dilayani lewat agen resmi kami.
         Hubungi agen tempat Anda mendapat informasi ini untuk memperoleh kodenya.</div>
+      <div class="note gerbang-buka sembunyi"><b>Tidak punya kode agen? Tidak masalah.</b>
+        Kolom ini boleh dikosongkan &mdash; langsung isi saja formulir di bawah,
+        pesanan Anda kami layani sendiri. Kode hanya diisi kalau Anda memang
+        dibantu salah satu agen resmi kami.</div>
     </div>
 
     <!-- isi utama: tersembunyi sampai kode agen terbukti sah -->
@@ -1306,17 +1329,22 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
 /* ====================================================================
-   DUA NOMOR, DUA GUNA YANG BERBEDA. Jangan disatukan.
+   DUA NOMOR, DUA GUNA. Sejak 9 Nov 2026 nilainya KEBETULAN SAMA, dan itu
+   keputusan Mas Dik — bukan kelalaian. Tetap dua tetapan terpisah supaya
+   salah satunya bisa diganti tanpa ikut mengubah yang lain.
 
    WA_KONSULTASI — nomor admin untuk TANYA-TANYA sebelum memesan. Dipakai
-     tombol "Konsultasi" di header. Tidak pernah dipakai sebagai tujuan
-     konfirmasi pesanan.
+     tombol "Konsultasi" di header.
 
-   WA_ADMIN — tujuan konfirmasi PESANAN kalau agennya belum punya nomor
-     terdaftar. Masih nomor contoh, jadi tombol konfirmasinya sengaja
-     dinonaktifkan untuk kasus itu (lihat waSiap). Mengisinya dengan nomor
-     admin akan membuat admin menerima pesanan seolah-olah dia agennya,
-     dan komisi pesanan itu jadi tidak punya pemilik.
+   WA_ADMIN — tujuan konfirmasi PESANAN untuk dua keadaan:
+       a. pesanan LANGSUNG (pelanggan tidak memakai kode agen), dan
+       b. pesanan lewat agen yang belum punya nomor terdaftar.
+     Dulu sengaja dibiarkan nomor contoh karena saat itu SEMUA pesanan
+     wajib lewat agen, sehingga mengisinya dengan nomor admin membuat
+     admin seolah-olah jadi agen dan komisinya tak bertuan. Alasan itu
+     hilang begitu jalur pesanan langsung dibuka: pesanan langsung dicatat
+     atas agen internal LANGSUNG yang memang tidak menghasilkan komisi,
+     jadi tidak ada komisi yang bisa salah alamat.
 
    Keduanya format internasional tanpa '+': 081234567890 -> 6281234567890.
    WA_PLACEHOLDER cuma pembanding untuk memeriksa "apakah WA_ADMIN sudah
@@ -1324,7 +1352,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
    kehilangan gunanya dan nomor contoh bisa lolos ke pelanggan.
    ==================================================================== */
 const WA_KONSULTASI = '6285113136509';     // admin, untuk konsultasi
-const WA_ADMIN = '6281234567890';          // <-- GANTI NOMOR INI (tujuan pesanan)
+const WA_ADMIN = '6285113136509';          // tujuan konfirmasi pesanan
 const WA_PLACEHOLDER = '6281234567890';    // pembanding; jangan diubah
 
 /* Kunci publishable memang untuk dipakai di browser. Yang menjaga data bukan
@@ -1367,8 +1395,9 @@ const pesan = (t, ms=6000) => {
 const S = {
   produk: [],
   tipe: 'perorangan',
-  kodeOk: false,        /* gerbang: true hanya setelah kode agen diperiksa & sah */
-  kodeRef: null,
+  kodeOk: false,        /* formulir boleh dipakai (kode sah ATAU gerbang terbuka) */
+  kodeRef: null,        /* kode agen yang TERBUKTI sah; null = pesanan langsung */
+  gerbangBuka: false,   /* dari gerbang_pesan(); default tertutup kalau gagal dibaca */
   agenNama: null,
   agenWa: null,         /* nomor tujuan WhatsApp — milik agen pemilik kode */
   bolehBiro: false,
@@ -1462,6 +1491,20 @@ async function muat(){
     S.dpMinPersen = a ? Number(a.r_minimum_persen) || 0 : 0;
   } catch { S.dpAktif = false; S.dpMinPersen = 0; }
 
+  /* Saklar jalur pesanan langsung. GAGAL = DIANGGAP TERTUTUP, dan arah itu
+     disengaja: kalau panggilannya error lalu kita anggap terbuka, formulir
+     terbuka untuk semua orang padahal database masih menolak pesanan tanpa
+     kode — orangnya mengisi sampai penuh lalu ditolak di langkah terakhir.
+     Dianggap tertutup paling buruk cuma meminta kode yang sebenarnya tidak
+     wajib, dan itu masih bisa diselesaikan lewat WhatsApp. */
+  try {
+    const { data: gd } = await sb.rpc('gerbang_pesan');
+    const g = Array.isArray(gd) ? gd[0] : gd;
+    S.gerbangBuka = !!(g && g.r_tanpa_agen);
+  } catch { S.gerbangBuka = false; }
+  if (S.gerbangBuka) S.kodeOk = true;
+  terapkanGerbang();
+
   /* Tautan agen (?ref=KODE): isi kolomnya dan periksa otomatis, supaya pelanggan
      tidak perlu mengetik ulang kode yang sudah ada di tautannya. */
   if (S.kodeRef){
@@ -1530,9 +1573,11 @@ function pilihPaket(slug){
   tandaiPaket();
   gambarUlang();
 
-  /* Formulirnya masih terkunci sampai kode agen terbukti sah. Pilihan
-     paketnya tetap disimpan, tapi orangnya diberi tahu apa yang kurang —
-     lebih baik daripada menggulirkan dia ke kartu yang isinya tersembunyi. */
+  /* Hanya berlaku saat gerbang TERTUTUP: formulirnya masih terkunci sampai
+     kode agen terbukti sah, jadi orangnya diberi tahu apa yang kurang —
+     lebih baik daripada menggulirkan dia ke kartu yang isinya tersembunyi.
+     Saat gerbang terbuka S.kodeOk sudah true, jadi cabang ini terlewat
+     sendirinya dan pemesan langsung meluncur ke formulir. */
   if (!S.kodeOk){
     $('gate')?.scrollIntoView({ behavior:'smooth', block:'center' });
     pesan('<b>Paket dipilih.</b> Masukkan dulu kode agen Anda untuk membuka '
@@ -1560,8 +1605,14 @@ function setTipe(t){
      tombolnya tetap bisa diklik tapi langsung dipantulkan dengan alasan jelas —
      lebih baik daripada tombol mati tanpa penjelasan. */
   if (t === 'biro' && !S.bolehBiro){
-    pesan('<b>Tidak tersedia</b> Kode ini belum diberi akses jalur biro. '
-        + 'Pakai jalur perorangan, atau hubungi kami untuk mengaktifkannya.', 9000);
+    /* Dua sebab, dua kalimat. Tanpa kode agen sama sekali, "kode ini belum
+       diberi akses" membingungkan — kodenya memang tidak ada. */
+    pesan(S.kodeRef
+      ? '<b>Tidak tersedia</b> Kode ini belum diberi akses jalur biro. '
+        + 'Pakai jalur perorangan, atau hubungi kami untuk mengaktifkannya.'
+      : '<b>Perlu kode agen</b> Jalur biro/travel hanya untuk biro yang sudah '
+        + 'terdaftar, jadi isi dulu kode agen Anda di atas. Untuk rombongan '
+        + 'pribadi atau keluarga, pakai jalur perorangan saja.', 9000);
     return;
   }
   S.tipe = t;
@@ -1574,9 +1625,20 @@ function setTipe(t){
   gambarUlang();
 }
 
-/* Isi form dikunci sampai kode agen terbukti sah. */
+/* Gerbang TERTUTUP: isi form dikunci sampai kode agen terbukti sah.
+   Gerbang TERBUKA: form selalu terbuka; kode cuma penanda agen.
+
+   S.kodeOk  = "formulir boleh dipakai"   (gerbang terbuka ATAU kode sah)
+   S.kodeRef = "ada agen yang menaungi"   (hanya kalau kodenya sah)
+   Dua hal berbeda, dan sejak jalur langsung dibuka tidak boleh dicampur:
+   S.kodeOk true dengan S.kodeRef null itu keadaan sah, yaitu pesanan
+   langsung. */
 function terapkanGerbang(){
   $('utama').classList.toggle('sembunyi', !S.kodeOk);
+  document.querySelectorAll('.gerbang-buka')
+    .forEach(e => e.classList.toggle('sembunyi', !S.gerbangBuka));
+  document.querySelectorAll('.gerbang-tutup')
+    .forEach(e => e.classList.toggle('sembunyi', !!S.gerbangBuka));
 }
 
 async function cekKodeAgen(otomatis = false){
@@ -1610,8 +1672,12 @@ async function cekKodeAgen(otomatis = false){
        daftar langkahnya disusun ulang dan panduan lanjut sendiri ke isi form. */
     setTimeout(tutorLanjutKalauMenunggu, 260);
   } else {
-    /* Gerbang ditutup ulang supaya kode sah yang lama tidak nyangkut. */
-    S.kodeOk = false; S.kodeRef = null; S.agenNama = null;
+    /* Keagenan dilepas supaya kode sah yang lama tidak nyangkut. Tapi kalau
+       gerbangnya terbuka, formulirnya TIDAK ikut dikunci: kode yang salah di
+       jalur terbuka cuma berarti "lanjut sebagai pesanan langsung", bukan
+       pintu tertutup. Yang hilang keagenannya, bukan hak memesannya. */
+    S.kodeOk = !!S.gerbangBuka;
+    S.kodeRef = null; S.agenNama = null;
     S.agenWa = null;  S.bolehBiro = false;
     const sebab = {
       tidak_terdaftar: 'Kode ini tidak terdaftar.',
@@ -1971,7 +2037,12 @@ function ringkasan(){
   const pakaiVou = p.bertingkat && S.vouOk;
   const satuan = p.bertingkat ? (pakaiVou ? p.harga_lokal : p.harga_umum) : p.harga_flat;
   const sub = satuan * n;
-  const persen = S.kodeOk ? S.diskonPersen : 0;
+  /* Diskon TIDAK bergantung pada ada-tidaknya kode agen. buat_pesanan()
+     mengambil diskon_persen dari pengaturan untuk SEMUA pesanan, termasuk
+     pesanan langsung. Syarat "S.kodeOk" yang dulu ada di sini membuat
+     ringkasan menampilkan potongan 0 sementara server tetap memotong —
+     angka di layar beda dengan angka yang tersimpan. */
+  const persen = S.diskonPersen;
   const pot = Math.round(sub * persen / 100);
   const anak = hitungAnak();
 
@@ -2047,7 +2118,13 @@ async function kirim(){
     return pesan('Nomor lain sama dengan nomor WhatsApp utama. Isi nomor yang berbeda, '
                + 'atau kosongkan saja.', 9000);
 
-  if (!S.kodeOk || !S.kodeRef) return pesan('Kode agen belum diperiksa.');
+  /* Gerbang tertutup: kode WAJIB sah. Gerbang terbuka: kode boleh null —
+     S.kodeRef null dikirim apa adanya dan database memutuskan, bukan
+     halaman ini. Jangan sekali-kali mengisi S.kodeRef dengan kode agen
+     internal dari sini: nilainya datang dari pelanggan, dan satu-satunya
+     yang boleh memilih wadah pesanan langsung adalah buat_pesanan(). */
+  if (!S.kodeOk) return pesan('Kode agen belum diperiksa.');
+  if (!S.gerbangBuka && !S.kodeRef) return pesan('Kode agen belum diperiksa.');
   if (S.tipe === 'biro'){
     if (!S.bolehBiro) return pesan('Kode ini tidak punya akses jalur biro.');
     if (!$('f-bnama').value.trim() || !$('f-bpic').value.trim() || !$('f-bwa').value.trim())
@@ -2210,12 +2287,16 @@ function tampilkanHasil(kode, token, nama, dp){
         ? `<a class="btn wa blok" href="https://wa.me/${tujuan}?text=${encodeURIComponent(teksWa)}"
               target="_blank" rel="noopener">Lanjut ke WhatsApp ${
               keAgen ? esc(S.agenNama) : 'kami'}</a>
-           ${keAgen ? '' : `<div class="hint" style="text-align:center;margin-top:7px">
-              Agen Anda belum punya nomor terdaftar, jadi diarahkan ke layanan pusat.</div>`}`
+           ${keAgen ? '' : (S.kodeRef
+              ? `<div class="hint" style="text-align:center;margin-top:7px">
+                   Agen Anda belum punya nomor terdaftar, jadi diarahkan ke layanan pusat.</div>`
+              : '')}`
         : `<div class="note d"><b>Nomor WhatsApp belum tersedia</b>
-             Agen Anda belum punya nomor terdaftar dan nomor pusat masih nomor contoh,
+             Nomor pusat masih nomor contoh${S.kodeRef
+               ? ' dan agen Anda belum punya nomor terdaftar' : ''},
              jadi tombolnya sengaja tidak diaktifkan supaya Anda tidak diarahkan ke
-             nomor yang salah. Simpan kode pesanan di atas dan hubungi agen Anda langsung.</div>`}
+             nomor yang salah. <b>Pesanan Anda tetap tersimpan.</b> Simpan kode di atas,
+             lalu hubungi kami lewat tombol Konsultasi di bagian atas halaman.</div>`}
 
       <div class="note"><b>Cek status pesanan kapan saja</b>
         Buka tautan ini — tidak perlu login:<br>

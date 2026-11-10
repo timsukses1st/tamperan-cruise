@@ -1438,14 +1438,29 @@ function rpcLatihan(nama, arg = {}){
     peran:     () => S.peran,
     agen_saya: () => S.agenId,
 
-    papan_peringkat: () => LATIH.agen.map(a => {
-      const mil = P.filter(o => o.agen_id === a.id && ['paid','boarded'].includes(o.status));
-      const tiket = jumlah(mil, 'pax');
-      const omzet = jumlah(mil, 'total');
-      const tarif = tiket >= 20 ? 10 : 5;
-      return { agen_id:a.id, nama:a.nama, tiket, omzet, tarif,
-               komisi: Math.round(omzet * tarif / 100) };
-    }).sort((x,y) => y.omzet - x.omzet),
+    /* p_periode DIHORMATI, tidak diabaikan. Kalau stub ini mengembalikan
+       semua waktu sementara kartu "Penjualan per Produk" di layar yang sama
+       sudah tersaring per bulan, panduan memperlihatkan dua periode
+       sekaligus — dan yang belajar dari situ akan salah membacanya nanti.
+       Ambang & tarif dibaca dari pengaturan latihan, bukan angka 20/10/5
+       yang ditulis tangan seperti sebelumnya. */
+    papan_peringkat: () => {
+      const s = LATIH.pengaturan[0] || {};
+      const amb = Number(s.ambang_tier) || 0;
+      const tAtas = Number(s.komisi_atas_persen) || 0;
+      const tBawah = Number(s.komisi_bawah_persen) || 0;
+      const per = arg.p_periode || null;
+      return LATIH.agen.map(a => {
+        const mil = P.filter(o => o.agen_id === a.id
+          && ['paid','boarded'].includes(o.status)
+          && (!per || String(o.dibuat).slice(0,7) === per));
+        const tiket = jumlah(mil, 'pax');
+        const omzet = jumlah(mil, 'total');
+        const tarif = amb && tiket >= amb ? tAtas : tBawah;
+        return { agen_id:a.id, nama:a.nama, tiket, omzet, tarif,
+                 komisi: Math.round(omzet * tarif / 100) };
+      }).sort((x,y) => y.omzet - x.omzet);
+    },
 
     /* 27 Okt 2026 — DIPERBAIKI. Nama kolomnya dulu salah: stub ini
        mengembalikan omzet/tiket/komisi, sedangkan fungsi aslinya di database
@@ -1457,15 +1472,20 @@ function rpcLatihan(nama, arg = {}){
        Nama kolom di sini WAJIB sama persis dengan pg_get_function_result
        milik ringkasan_dashboard(text). */
     ringkasan_dashboard: () => {
-      const lunas = P.filter(o => ['paid','boarded'].includes(o.status));
+      /* p_periode ikut dihormati, alasannya sama dengan papan_peringkat:
+         KPI dan kartu penjualan di layar yang sama harus satu periode. */
+      const per = arg.p_periode || null;
+      const diPeriode = o => !per || String(o.dibuat).slice(0,7) === per;
+      const lunas = P.filter(o => ['paid','boarded'].includes(o.status) && diPeriode(o));
       const fuKena = P.filter(o => ['pending','expired','cancel_pembeli'].includes(o.status)
-                                && o.fu_status !== 'jadi' && o.fu_status !== 'tidak');
+                                && o.fu_status !== 'jadi' && o.fu_status !== 'tidak'
+                                && diPeriode(o));
       return [{
         omzet_total:     jumlah(lunas,'total'),
         tiket_total:     jumlah(lunas,'pax'),
         komisi_total:    Math.round(jumlah(lunas,'total') * 0.08),
         perlu_follow_up: fuKena.length,
-        menunggu_verif:  P.filter(o => ['pending','waiting'].includes(o.status)).length,
+        menunggu_verif:  P.filter(o => ['pending','waiting'].includes(o.status) && diPeriode(o)).length,
       }];
     },
 
@@ -1515,6 +1535,28 @@ function rpcLatihan(nama, arg = {}){
         o.kapal = k ? { nama:k.nama } : null;
       }
       return null;
+    },
+
+    /* Ambang & tarif tier, ditiru dari baris pengaturan latihan supaya
+       progress bar di panduan mengukur ke angka yang sama dengan yang
+       tertulis di layar Pengaturan-nya. */
+    tier_aturan: () => {
+      const s = LATIH.pengaturan[0] || {};
+      return [{ r_ambang: s.ambang_tier, r_bawah: s.komisi_bawah_persen,
+                r_atas: s.komisi_atas_persen }];
+    },
+
+    /* Daftar bulan yang punya pesanan, dihitung dari data latihan. Tanpa ini
+       penyaring periode di panduan kosong dan tab-nya terlihat rusak. */
+    periode_pesanan: () => {
+      const peta = {};
+      P.forEach(o => {
+        if (S.peran === 'agen' && o.agen_id !== S.agenId) return;
+        const p = String(o.dibuat).slice(0, 7);
+        peta[p] = (peta[p] || 0) + 1;
+      });
+      return Object.entries(peta).sort((a, b) => b[0].localeCompare(a[0]))
+        .map(([r_periode, r_jumlah]) => ({ r_periode, r_jumlah }));
     },
 
     /* Audit di mode latihan tidak disimpan ke mana pun — LATIH tidak punya
@@ -2551,20 +2593,74 @@ function mulaiTutor(paksa){
   tutorKe(0);
 }
 
+/* ====================================================================
+   PERIODE — dipakai bersama tab Ringkasan dan tab Komisi
+   --------------------------------------------------------------------
+   DASARNYA `dibuat` (tanggal PESAN), bukan tanggal berangkat. Bukan selera:
+   ringkasan_dashboard() dan papan_peringkat() dua-duanya menyaring pakai
+   to_char(dibuat,'YYYY-MM'). Kalau penjualan produk disaring pakai tanggal
+   berangkat, dua kartu di layar yang SAMA akan menampilkan bulan yang beda
+   isinya — dan yang satu dipakai membayar komisi.
+
+   null = semua waktu. Nilai lain berbentuk 'YYYY-MM'. */
+const BULAN_ID = ['Januari','Februari','Maret','April','Mei','Juni','Juli',
+                  'Agustus','September','Oktober','November','Desember'];
+const namaPeriode = p => {
+  if (!p) return 'Semua waktu';
+  const [th, bl] = String(p).split('-');
+  return `${BULAN_ID[Number(bl) - 1] || bl} ${th}`;
+};
+/* Bulan berjalan dalam waktu LOKAL. new Date().toISOString() memakai UTC —
+   di WIB, tanggal 1 pukul 00–07 akan terbaca sebagai bulan sebelumnya. */
+const periodeKini = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+
+/* Penyaring bulan. Dipakai dua tab, jadi dibuat sekali di sini. */
+function kartuPeriode(daftar, terpilih, idSel){
+  const ada = (daftar || []).map(x => x.r_periode);
+  /* Bulan berjalan selalu ikut ditawarkan walau belum ada pesanannya —
+     kalau tidak, awal bulan pilihannya hilang dan orang mengira rusak. */
+  const kini = periodeKini();
+  if (!ada.includes(kini)) ada.unshift(kini);
+  const jml = Object.fromEntries((daftar || []).map(x => [x.r_periode, x.r_jumlah]));
+  return `<div class="card" style="padding-top:14px;padding-bottom:14px">
+    <div class="fld" style="margin:0;max-width:340px">
+      <label for="${idSel}">Periode</label>
+      <select id="${idSel}">
+        ${ada.map(p => `<option value="${esc(p)}" ${p === terpilih ? 'selected' : ''}>${
+          esc(namaPeriode(p))}${jml[p] ? ` — ${jml[p]} pesanan` : ''}</option>`).join('')}
+        <option value="" ${!terpilih ? 'selected' : ''}>Semua waktu</option>
+      </select>
+      <div class="hint">Dihitung dari <b>tanggal pesanan dibuat</b>, sama dengan
+        dasar hitungan komisi.</div>
+    </div></div>`;
+}
+
 /* ============ RINGKASAN ============ */
 async function tabRingkas(){
-  const [{data:r, error:er}, {data:lb}, {data:ord, error:eo}] = await Promise.all([
-    DB.rpc('ringkasan_dashboard',{p_periode:null}),
-    DB.rpc('papan_peringkat',{p_periode:null}),
-    DB.from('pesanan').select('pax,total,status,produk(nama)').in('status',['paid','boarded'])
+  /* Default: bulan berjalan. Sebelumnya semua waktu ditumpuk jadi satu angka,
+     dan itu tidak terbaca begitu datanya menumpuk lintas bulan. */
+  if (S.periode === undefined) S.periode = periodeKini();
+  const per = S.periode || null;
+
+  const [{data:r, error:er}, {data:lb}, {data:ord, error:eo}, {data:prd}] = await Promise.all([
+    DB.rpc('ringkasan_dashboard',{p_periode:per}),
+    DB.rpc('papan_peringkat',{p_periode:per}),
+    /* `dibuat` ikut diambil supaya penyaringan bulan di sini memakai kolom
+       yang SAMA dengan yang dipakai kedua fungsi di atas. */
+    DB.from('pesanan').select('pax,total,status,dibuat,produk(nama)').in('status',['paid','boarded']),
+    DB.rpc('periode_pesanan'),
   ]);
   if (er) return gagal(er);
   if (eo) return gagal(eo);
   const k = (r&&r[0])||{}, L = lb||[];
 
-  /* Penjualan per produk — dihitung dari pesanan lunas */
+  /* Penjualan per produk — dihitung dari pesanan lunas, disaring periode */
   const perProduk = {};
   (ord||[]).forEach(o => {
+    if (per && String(o.dibuat).slice(0,7) !== per) return;
     const n = o.produk?.nama || '—';
     perProduk[n] = perProduk[n] || {tiket:0, omzet:0};
     perProduk[n].tiket += o.pax; perProduk[n].omzet += o.total;
@@ -2589,6 +2685,7 @@ async function tabRingkas(){
   }
 
   $('isi').innerHTML = `
+    ${kartuPeriode(prd, S.periode, 'rk-periode')}
     <div class="grid g4">
       <div class="kpi"><div class="k">Omzet</div><div class="v">${rp(k.omzet_total)}</div>
         <div class="d">${k.tiket_total||0} tiket terjual</div></div>
@@ -2615,14 +2712,22 @@ async function tabRingkas(){
         <div class="note w"><b>Tarif berlaku retroaktif</b>
           Begitu tembus ambang tier, seluruh omzet periode itu ikut naik tarifnya — bukan hanya tiket sesudahnya.</div>
       </div>
-      <div class="card"><h3>Penjualan per Produk</h3>
+      <div class="card"><h3>Penjualan per Produk
+        <span class="pill p-mute">${esc(namaPeriode(S.periode))}</span></h3>
         ${urutProduk.length ? `<table>${urutProduk.map(([n,v])=>
           `<tr><td>${esc(n)}</td>
             <td class="num" style="color:var(--muted)">${v.tiket} tiket</td>
             <td class="num"><b>${rp(v.omzet)}</b></td></tr>`).join('')}</table>`
-          : '<div class="hint">Belum ada penjualan lunas.</div>'}
+          : `<div class="hint">Belum ada penjualan lunas${
+              S.periode ? ' di ' + esc(namaPeriode(S.periode)) : ''}.</div>`}
       </div>
     </div>`;
+
+  /* Mengganti periode = menggambar ulang seluruh tab, supaya KPI, leaderboard,
+     dan penjualan per produk SELALU berasal dari periode yang sama. Kalau
+     hanya satu kartu yang ikut berubah, layar menampilkan dua periode
+     sekaligus tanpa ada yang menyadarinya. */
+  $('rk-periode').onchange = e => { S.periode = e.target.value || null; tabRingkas(); };
 }
 
 /* ============ PESANAN ============ */
@@ -6544,30 +6649,56 @@ async function tabAtur(){
 
 /* ============ AGEN: KOMISI & PELANGGAN SAYA ============ */
 async function tabKomisi(){
-  const [{data:lb}, {data:semuaPesanan, error}] = await Promise.all([
-    DB.rpc('papan_peringkat',{p_periode:null}),
+  if (S.periode === undefined) S.periode = periodeKini();
+  const per = S.periode || null;
+
+  const [{data:lb}, {data:semuaPesanan, error}, {data:prd}, {data:ta}] = await Promise.all([
+    DB.rpc('papan_peringkat',{p_periode:per}),
     DB.from('pesanan')
       .select('kode,pax,total,status,dibuat,agen_id,pemesan_nama,pemesan_hp,produk(nama)')
-      .order('dibuat',{ascending:false})
+      .order('dibuat',{ascending:false}),
+    DB.rpc('periode_pesanan'),
+    /* Ambang & tarif dibaca dari database, TIDAK ditulis tangan lagi.
+       Sebelumnya angka 20 tertanam di dua tempat di fungsi ini; begitu
+       ambangnya diubah lewat Pengaturan, progress bar agen tetap mengukur
+       ke 20 dan menjanjikan tarif naik yang tidak akan datang.
+       Peran 'agen' tidak boleh membaca tabel pengaturan, jadi lewat
+       tier_aturan() yang hanya membuka tiga angka itu. */
+    DB.rpc('tier_aturan'),
   ]);
   if (error) return gagal(error);
+  const aturTier = (Array.isArray(ta) ? ta[0] : ta) || {};
+  /* Kalau fungsinya belum ada (database belum di-deploy), jangan tampilkan
+     angka karangan — progress-nya disembunyikan, bukan diisi tebakan. */
+  const ambang = Number(aturTier.r_ambang) || 0;
+
   /* Saringan yang menyamakan tampilan agen sungguhan dengan pratinjau.
-     Agen sungguhan: tidak berubah, RLS sudah menyaring lebih dulu. */
+     Agen sungguhan: tidak berubah, RLS sudah menyaring lebih dulu.
+     Periode disaring di sini juga, pakai kolom `dibuat` — sama dengan
+     papan_peringkat(), supaya daftar pelanggan cocok dengan angka komisi. */
   const pesananku = (semuaPesanan||[])
-    .filter(o => S.agenId && o.agen_id === S.agenId);
+    .filter(o => S.agenId && o.agen_id === S.agenId)
+    .filter(o => !per || String(o.dibuat).slice(0,7) === per);
   const L=lb||[], saya=L.find(x=>x.agen_id===S.agenId)||{tiket:0,omzet:0,tarif:0,komisi:0};
   const pos=L.findIndex(x=>x.agen_id===S.agenId)+1;
-  const sisa=Math.max(0,20-saya.tiket);
+  const sisa=Math.max(0, ambang - saya.tiket);
 
   $('isi').innerHTML = `
-    <div class="card"><h3>Progress Tier Komisi</h3>
+    ${kartuPeriode(prd, S.periode, 'km-periode')}
+    <div class="card"><h3>Progress Tier Komisi
+      <span class="pill p-mute">${esc(namaPeriode(S.periode))}</span></h3>
       <div style="display:flex;justify-content:space-between;font-size:13.5px">
-        <span><b>${saya.tiket} tiket</b></span>
-        <span class="pill ${saya.tarif>=10?'p-ok':'p-warn'}">TARIF ${saya.tarif}%</span></div>
-      <div class="prog"><i style="width:${Math.min(100,saya.tiket/20*100)}%"></i></div>
+        <span><b>${saya.tiket} tiket</b>${ambang?` dari ${ambang}`:''}</span>
+        <span class="pill ${saya.tarif >= Number(aturTier.r_atas || Infinity)
+          ? 'p-ok' : 'p-warn'}">TARIF ${saya.tarif}%</span></div>
+      ${ambang ? `<div class="prog"><i style="width:${
+        Math.min(100, saya.tiket / ambang * 100)}%"></i></div>` : ''}
       <div style="font-size:12.5px;color:var(--muted)">Tarif berlaku <b>retroaktif</b> ke seluruh
         ${saya.tiket} tiket, bukan hanya tiket sesudah ambang.
-        ${sisa?` Kurang <b>${sisa} tiket</b> lagi menuju tarif lebih tinggi.`:''}</div>
+        ${ambang && sisa ? ` Kurang <b>${sisa} tiket</b> lagi menuju tarif
+          ${aturTier.r_atas ? Number(aturTier.r_atas) + '%' : 'lebih tinggi'}.` : ''}
+        ${!ambang ? ' <b>Ambang tier belum terbaca</b> — progress disembunyikan '
+          + 'daripada menampilkan angka yang belum tentu benar.' : ''}</div>
     </div>
     <div class="grid g4">
       <div class="kpi"><div class="k">Komisi Berjalan</div><div class="v">${rp(saya.komisi)}</div>
@@ -6622,6 +6753,11 @@ async function tabKomisi(){
     saring: [{ kolom: 7, semua: 'Semua status',
                pilihan: [...new Set(pesananku.map(o => (STATUS[o.status]||[o.status])[0]))] }]
   });
+
+  /* Sama seperti di Ringkasan: ganti periode = gambar ulang seluruh tab,
+     supaya progress tier, KPI komisi, dan daftar pelanggan tidak pernah
+     berasal dari bulan yang berbeda-beda. */
+  $('km-periode').onchange = e => { S.periode = e.target.value || null; tabKomisi(); };
 }
 
 /* ============ BOARDING ============ */

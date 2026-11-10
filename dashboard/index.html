@@ -6110,8 +6110,22 @@ async function tabAtur(){
         'Halaman pemesanan langsung ikut berubah begitu disimpan, tanpa deploy ulang.')}
     </div></div>
     <div class="card"><h3>Boarding &amp; Kapal</h3><div class="grid g3" style="margin-bottom:0">
-      ${f('ambang_cek_boarding','Ambang cek per nama',
-        'Pesanan sampai sekian orang dicentang per nama. Di atas itu dihitung per kepala')}
+      <!-- "Ambang cek per nama" DIHAPUS dari layar 10 Nov 2026.
+           Setelan itu sudah tidak mengubah apa pun sejak 27 Okt, waktu QR dan
+           pencentangan per nama dibatalkan: boarding sekarang mengisi satu
+           ANGKA per rombongan. Diperiksa di dua sisi sebelum dihapus —
+           di dashboard nilainya cuma dibaca untuk ditampilkan lalu disimpan
+           kembali, dan di database tidak ada satu pun fungsi yang memakainya
+           selain trigger audit.
+
+           Setelan yang tidak mengubah apa pun LEBIH BERBAHAYA daripada tidak
+           ada: orang mengira sudah mengatur sesuatu, lalu heran kenapa
+           perilakunya tidak berubah.
+
+           Kolom pengaturan.ambang_cek_boarding SENGAJA TIDAK dihapus dari
+           database — tidak perlu migration, nilai lamanya tetap tersimpan,
+           dan kalau suatu saat pencentangan per nama dihidupkan lagi
+           tinggal kolom ini dimunculkan kembali di sini. -->
       ${f('kuota_kursi','Kuota kursi per keberangkatan','Dikosongkan = tanpa batas')}
       ${f('kapasitas_izin','Kapasitas izin kapal','⬜ Belum diketahui — tanya syahbandar')}
       ${f('tahan_pending_jam','Order pending ditahan (jam)')}
@@ -6177,7 +6191,11 @@ async function tabAtur(){
   if (!ro) $('tblSimpan').onclick = async () => {
     const b=$('tblSimpan'); b.disabled=true; b.innerHTML='<span class="spin"></span> Menyimpan…';
     const isi={};
-    ['diskon_persen','ambang_tier','komisi_bawah_persen','komisi_atas_persen','ambang_cek_boarding',
+    /* 'ambang_cek_boarding' DIKELUARKAN dari daftar ini bersamaan dengan
+       kolomnya dihapus dari layar. Kalau tertinggal di sini, $('set_…')
+       mengembalikan null dan .value melempar TypeError — yang hilang bukan
+       satu kolom, tapi SELURUH tombol Simpan Pengaturan. */
+    ['diskon_persen','ambang_tier','komisi_bawah_persen','komisi_atas_persen',
      'kuota_kursi','kapasitas_izin','tahan_pending_jam','retensi_nik_bulan'].forEach(k=>{
       const v=$('set_'+k).value.trim(); isi[k]= v===''?null:Number(v);
     });

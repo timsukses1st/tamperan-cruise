@@ -1267,7 +1267,9 @@ function dataLatihan(){
          Tanpa baris ini data[k] undefined, String(!!undefined) = 'false', dan
          saklarnya selalu tampil "Mati" di panduan — mengajarkan hal yang salah. */
       tanpa_agen_aktif:true, dp_aktif:true, dp_minimum_persen:'30.00',
-      kolom_manifest:{nama:true,gender:true,usia:true,nik:true,alamat:true,wn:false} }],
+      /* nik:false menyamai data sungguhan. Mode latihan yang menampilkan
+         kolom NIK akan mengajarkan layar yang tidak ada di produksi. */
+      kolom_manifest:{nama:true,gender:true,usia:true,nik:false,alamat:true,wn:false} }],
     /* Katalog produk. Sebelum 15 Okt 2026 tabel ini TIDAK ada di data latihan,
        jadi kartu Produk & Harga akan kosong melompong saat mode panduan.
        Isinya sengaja sama dengan katalog sungguhan: ini konfigurasi, bukan data
@@ -6130,12 +6132,28 @@ async function tabAtur(){
       ${f('kapasitas_izin','Kapasitas izin kapal','⬜ Belum diketahui — tanya syahbandar')}
       ${f('tahan_pending_jam','Order pending ditahan (jam)')}
     </div></div>
-    <div class="card"><h3>Leaderboard &amp; NIK</h3><div class="grid g3" style="margin-bottom:0">
+    <!-- DUA SETELAN NIK DIHAPUS DARI LAYAR 10 Nov 2026.
+         NIK sudah tidak dikumpulkan sejak 27 Okt — halaman pemesanan tidak
+         punya kolomnya sama sekali, dan di database 0 dari seluruh pesanan
+         punya NIK terisi. Jadi keduanya mengatur sesuatu yang tidak ada:
+
+           "Siapa boleh lihat NIK penuh" — menyamarkan kolom manifest yang
+             selalu kosong.
+           "Hapus NIK otomatis setelah (bulan)" — INI YANG PALING PERLU
+             DICATAT. Tidak ada satu pun fungsi yang memakainya dan pg_cron
+             tidak terpasang di proyek ini, jadi tidak pernah ada yang
+             menghapus apa pun. Setelan itu MENJANJIKAN penghapusan data
+             pribadi yang tidak pernah terjadi — kalau NIK suatu saat
+             dikumpulkan lagi, janji itu bohong tanpa ada yang sadar.
+
+         Kolom databasenya SENGAJA tidak dihapus: pertanyaan ke syahbandar
+         soal wajib-tidaknya data identitas penumpang belum terjawab. Kalau
+         ternyata wajib, NIK kembali dan dua kolom ini tinggal dimunculkan
+         lagi di sini — TAPI penghapus otomatisnya harus benar-benar dibuat
+         dulu sebelum setelan retensi ditampilkan kembali. -->
+    <div class="card"><h3>Leaderboard</h3><div class="grid g3" style="margin-bottom:0">
       ${pil('lb_agen_mode','Leaderboard untuk agen',
         [['off','Tidak ada'],['peringkat','Peringkat saja'],['penuh','Angka terbuka']])}
-      ${pil('nik_siapa_boleh_lihat','Siapa boleh lihat NIK penuh',
-        [['super','Super Admin saja'],['super_owner','Super Admin & Owner']])}
-      ${f('retensi_nik_bulan','Hapus NIK otomatis setelah (bulan)')}
     </div></div>
     ${ro?'':'<button class="btn" id="tblSimpan">Simpan pengaturan</button>'}
     <div class="card scrollx" id="kartu-produk">
@@ -6196,10 +6214,10 @@ async function tabAtur(){
        mengembalikan null dan .value melempar TypeError — yang hilang bukan
        satu kolom, tapi SELURUH tombol Simpan Pengaturan. */
     ['diskon_persen','ambang_tier','komisi_bawah_persen','komisi_atas_persen',
-     'kuota_kursi','kapasitas_izin','tahan_pending_jam','retensi_nik_bulan'].forEach(k=>{
+     'kuota_kursi','kapasitas_izin','tahan_pending_jam'].forEach(k=>{
       const v=$('set_'+k).value.trim(); isi[k]= v===''?null:Number(v);
     });
-    ['komisi_dari','periode_reset','lb_agen_mode','nik_siapa_boleh_lihat']
+    ['komisi_dari','periode_reset','lb_agen_mode']
       .forEach(k=> isi[k]=$('set_'+k).value);
     /* Kolom boolean dikirim sebagai boolean, bukan teks. value selalu String,
        dan 'false' itu nilai yang truthy — menyimpannya apa adanya akan

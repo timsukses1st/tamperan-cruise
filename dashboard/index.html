@@ -1385,6 +1385,14 @@ function kueriLatihan(nama){
     eq(k,v){  baris = baris.filter(r => r[k] === v); return api; },
     in(k,a){  baris = baris.filter(r => a.includes(r[k])); return api; },
     not(k,op,v){ if (op === 'is' && v === null) baris = baris.filter(r => r[k] != null); return api; },
+    /* gte/lt ditambahkan 10 Nov 2026 waktu penyaring periode dipasang di tab
+       Pesanan. Tanpa keduanya, mode panduan mati dengan "gte is not a
+       function" — gagal mentah, bukan ditolak dengan sopan. Persis kejadian
+       yang sama seperti delete() waktu galeri dibuat dulu.
+       Perbandingan string ISO aman untuk tanggal: urutan leksikografisnya
+       sama dengan urutan waktunya selama formatnya seragam. */
+    gte(k,v){ baris = baris.filter(r => String(r[k]) >= String(v)); return api; },
+    lt(k,v){  baris = baris.filter(r => String(r[k]) <  String(v)); return api; },
     limit(n){ baris = baris.slice(0,n); return api; },
     maybeSingle(){ return Promise.resolve({ data: baris[0] ?? null, error:null }); },
     single(){      return Promise.resolve({ data: baris[0] ?? null, error:null }); },
@@ -2731,13 +2739,39 @@ async function tabRingkas(){
 }
 
 /* ============ PESANAN ============ */
+/* Batas bulan dalam WIB, dikembalikan sebagai ISO (UTC) untuk dikirim ke
+   PostgREST. 'YYYY-MM' + '-01T00:00:00+07:00' adalah tengah malam WIB; Date
+   mengubahnya ke UTC sendiri. Harus sama dengan potongan bulan di database,
+   yang sejak 10 Nov 2026 memakai "at time zone 'Asia/Jakarta'" — kalau beda,
+   daftar pesanan dan angka ringkasannya akan berbeda isi di tanggal 1. */
+function batasBulanWib(periode){
+  if (!periode) return null;
+  const [th, bl] = periode.split('-').map(Number);
+  const mulai = new Date(`${periode}-01T00:00:00+07:00`);
+  const bl2 = bl === 12 ? 1 : bl + 1;
+  const th2 = bl === 12 ? th + 1 : th;
+  const sampai = new Date(`${th2}-${String(bl2).padStart(2,'0')}-01T00:00:00+07:00`);
+  return { mulai: mulai.toISOString(), sampai: sampai.toISOString() };
+}
+
 async function tabPesanan(){
-  const { data, error } = await DB.from('pesanan')
+  if (S.periode === undefined) S.periode = periodeKini();
+  const bts = batasBulanWib(S.periode);
+
+  /* Periode disaring DI SERVER, bukan sesudah 300 baris diambil. Kalau
+     disaring di browser, batas 300 berlaku lebih dulu untuk seluruh riwayat —
+     begitu pesanan menumpuk, bulan-bulan lama hilang sama sekali dari daftar
+     dan tidak ada tanda apa pun bahwa ada yang terpotong. */
+  let q = DB.from('pesanan')
     .select('kode,tipe,pax,anak,total,status,dibuat,tanggal_berangkat,kode_voucher_beku,'
            + 'pemesan_nama,pemesan_hp,pemesan_hp2,pemesan_alamat,biro_id,biro_nama,'
            + 'deposit_jam,deposit_sebab,harga_satuan_beku,dp_target,'
-           + 'produk(nama),agen(nama),kapal(nama)')
-    .order('dibuat',{ascending:false}).limit(300);
+           + 'produk(nama),agen(nama),kapal(nama)');
+  if (bts) q = q.gte('dibuat', bts.mulai).lt('dibuat', bts.sampai);
+  const [{ data, error }, { data: prd }] = await Promise.all([
+    q.order('dibuat',{ascending:false}).limit(300),
+    DB.rpc('periode_pesanan'),
+  ]);
   if (error) return gagal(error);
 
   /* Ringkasan uang per pesanan: satu panggilan untuk seluruh tabel.
@@ -2753,8 +2787,13 @@ async function tabPesanan(){
   S.bayarPeta = bayarPeta;
 
   $('isi').innerHTML = `
+    ${kartuPeriode(prd, S.periode, 'ps-periode')}
     <div class="card scrollx">
-      <h3>Pesanan <span class="pill p-mute">${data.length}</span></h3>
+      <h3>Pesanan <span class="pill p-mute">${data.length}</span>
+        <span class="pill p-mute">${esc(namaPeriode(S.periode))}</span></h3>
+      ${data.length >= 300 ? `<div class="note w"><b>Baru 300 pesanan pertama
+        yang ditampilkan</b> Persempit periodenya supaya tidak ada yang
+        terlewat dari daftar ini.</div>` : ''}
       <table data-papan="pesanan">
         <thead><tr><th class="nw">Kode</th><th class="nw">Dipesan</th><th class="nw">Berangkat</th>
             <th>Pembeli</th><th class="nw">WhatsApp</th><th class="nw">Produk</th>
@@ -2799,6 +2838,8 @@ async function tabPesanan(){
         pilihan: [...new Set((data||[]).map(o => o.agen?.nama).filter(Boolean))] }
     ]
   });
+
+  $('ps-periode').onchange = e => { S.periode = e.target.value || null; tabPesanan(); };
 }
 
 /* ---- Aksi status pesanan ----

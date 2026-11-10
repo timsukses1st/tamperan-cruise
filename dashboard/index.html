@@ -1515,6 +1515,15 @@ function rpcLatihan(nama, arg = {}){
       return null;
     },
 
+    /* Audit di mode latihan tidak disimpan ke mana pun — LATIH tidak punya
+       tabel audit, dan panduan memang tidak menampilkannya. Yang ditiru cukup
+       penolakan perannya, supaya alurnya sama dengan aslinya. */
+    catat_audit: () => {
+      if (!['super','owner','admin','agen','boarding'].includes(S.peran))
+        throw { code:'42501', message:'Tidak berhak mencatat audit.' };
+      return null;
+    },
+
     /* Aturannya ditiru dari ubah_tanggal_berangkat() di database, bukan
        disederhanakan. Mode latihan yang lebih longgar daripada aslinya
        mengajarkan kebiasaan yang nanti ditolak di pekerjaan sungguhan. */
@@ -3990,7 +3999,11 @@ async function tabFollowUp(){
             <td class="nw"><span class="pill ${f[1]}">${f[0]}</span></td>
             <td class="nw" style="color:var(--muted);font-size:12px"
                 data-urut="${o.fu_terakhir?Date.parse(o.fu_terakhir):0}">${jam(o.fu_terakhir)}</td>
-            <td><select data-fu="${esc(o.kode)}" style="min-width:140px">
+            <!-- data-lama menyimpan nilai SEBELUM diubah. Waktu onchange
+                 berjalan, sel.value sudah terlanjur jadi nilai baru, jadi
+                 tanpa ini kolom "dari" di audit tidak akan pernah terisi. -->
+            <td><select data-fu="${esc(o.kode)}" data-lama="${esc(o.fu_status || '')}"
+                        style="min-width:140px">
               ${Object.entries(FU).map(([v,t])=>
                 `<option value="${v}" ${o.fu_status===v?'selected':''}>${t[0]}</option>`).join('')}
             </select></td></tr>`;
@@ -4014,8 +4027,14 @@ async function tabFollowUp(){
     }).eq('kode', sel.dataset.fu);
     sel.disabled = false;
     if (error) return gagalPesan(error);
-    await DB.from('audit').insert({aktor_nama:S.email, aksi:'Follow-up',
-      objek:sel.dataset.fu, ke:sel.value});
+    /* Lewat catat_audit(), bukan insert langsung ke tabel audit. Hak INSERT
+       langsung sudah dicabut: dulu agen & boarding bisa menulis baris audit
+       apa saja termasuk nama pelakunya, sedangkan admin justru TIDAK bisa
+       menulis sama sekali sehingga perubahannya hilang tanpa jejak.
+       Sekarang aktor dan namanya diisi server dari auth.uid(). */
+    await DB.rpc('catat_audit', { p_aksi:'pesanan.follow_up',
+      p_objek:'pesanan:'+sel.dataset.fu,
+      p_dari:sel.dataset.lama || null, p_ke:sel.value });
     pesan(`<b>${esc(sel.dataset.fu)}</b> ditandai <b>${FU[sel.value][0]}</b>. Tercatat supaya tidak ada lead yang dihubungi dua kali atau terlewat.`);
     tabFollowUp();
   });
@@ -6168,12 +6187,33 @@ async function tabAtur(){
        dan 'false' itu nilai yang truthy — menyimpannya apa adanya akan
        MENYALAKAN saklar justru ketika orangnya memilih "Mati". */
     ['tanpa_agen_aktif'].forEach(k=> isi[k] = $('set_'+k).value === 'true');
+
+    /* Apa yang BERUBAH dihitung sebelum disimpan, selagi S.atur masih memuat
+       nilai lama. Audit yang cuma berbunyi "Ubah pengaturan" tanpa isi tidak
+       menjawab pertanyaan yang justru akan ditanyakan nanti: tarif komisinya
+       diubah dari berapa ke berapa, dan oleh siapa. */
+    const beda = {};
+    for (const k of Object.keys(isi)){
+      const lama = S.atur ? S.atur[k] : undefined;
+      if (String(lama ?? '') !== String(isi[k] ?? '')) beda[k] = [lama ?? null, isi[k] ?? null];
+    }
+
     isi.diubah = new Date().toISOString();
     const { error } = await DB.from('pengaturan').update(isi).eq('id',true);
     b.disabled=false; b.textContent='Simpan pengaturan';
     if (error) return gagalPesan(error);
-    await DB.from('audit').insert({aktor_nama:S.email, aksi:'Ubah pengaturan', objek:'pengaturan'});
-    pesan('Pengaturan tersimpan. Perubahan tercatat di audit log.');
+    /* Lewat catat_audit(). Sebelum ini audit ditulis langsung ke tabel, dan
+       policy-nya TIDAK memuat peran admin — jadi admin mengubah harga atau
+       tarif komisi tanpa meninggalkan jejak, diam-diam, karena error-nya juga
+       tidak pernah diperiksa. Sekarang errornya diperiksa dan disebutkan. */
+    const { error: eAudit } = await DB.rpc('catat_audit', {
+      p_aksi: 'pengaturan.ubah', p_objek: 'pengaturan',
+      p_meta: Object.keys(beda).length ? beda : null,
+    });
+    pesan(eAudit
+      ? 'Pengaturan tersimpan, tapi pencatatan audit gagal: ' + esc(eAudit.message)
+      : `Pengaturan tersimpan. ${Object.keys(beda).length} perubahan tercatat di audit log.`,
+      eAudit ? 12000 : undefined);
   };
 }
 

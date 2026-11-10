@@ -5240,6 +5240,43 @@ async function tabVoucher(){
         itu hal lain — kertasnya disobek kasir, tidak diurus di sini.</div>
     </div>
 
+    ${bisaT ? `<div class="card">
+      <h3>Tambah add-on baru</h3>
+      <div class="grid g3">
+        <div class="fld"><label for="t-nama">Nama</label>
+          <input id="t-nama" placeholder="mis. Sewa Snorkeling" maxlength="80">
+          <div class="hint">Yang dibaca pemesan di halaman pemesanan.</div></div>
+        <div class="fld"><label for="t-satuan">Satuan</label>
+          <select id="t-satuan">
+            <option value="pesanan">per pesanan — sekali, berapa pun jumlah orang</option>
+            <option value="orang">per orang — otomatis dikali jumlah pax</option>
+            <option value="unit">per unit — pemesan mengetik jumlahnya</option>
+          </select>
+          <div class="hint" id="t-satuan-ket">Dikenakan sekali per pesanan.</div></div>
+        <div class="fld"><label for="t-harga">Harga (Rp)</label>
+          <input id="t-harga" inputmode="numeric" placeholder="mis. 150000">
+          <div class="hint">Per satuan yang dipilih. Tidak boleh 0.</div></div>
+      </div>
+      <div class="grid g2">
+        <!-- SATU atribut class saja. Ditulis dua kali ("fld" lalu "sembunyi"),
+             browser memakai yang pertama dan membuang sisanya — kolomnya akan
+             tetap terlihat padahal kodenya tampak menyembunyikan. -->
+        <div class="fld sembunyi" id="t-maks-bungkus">
+          <label for="t-maks">Maksimal per pesanan</label>
+          <input id="t-maks" inputmode="numeric" placeholder="kosongkan = tanpa batas">
+          <div class="hint">Hanya untuk satuan <b>per unit</b>. Membatasi angka yang
+            boleh diketik pemesan.</div></div>
+        <div class="fld"><label for="t-ket">Keterangan</label>
+          <input id="t-ket" placeholder="mis. Termasuk instruktur pendamping." maxlength="160">
+          <div class="hint">Baris kecil di bawah nama. Boleh dikosongkan.</div></div>
+      </div>
+      <div class="note"><b>Kode slug dibuat otomatis dari namanya</b>
+        <span class="mono" id="t-slug-pratinjau">—</span> &mdash; huruf kecil, angka,
+        dan strip. Slug ini yang dikirim halaman pemesanan ke database waktu orang
+        memilih add-on, jadi <b>tidak bisa diubah lagi</b> setelah dibuat. Nama
+        tampilannya masih bisa diganti kapan saja.</div>
+      <button type="button" class="btn" id="t-buat">Tambahkan add-on</button>
+    </div>` : ''}
     <div class="card scrollx">
       <h3>Tambahan (Add-on)</h3>
       <table data-papan="tambahan">
@@ -5300,6 +5337,87 @@ async function tabVoucher(){
      tidak pernah dipasangi handler — jadi kelihatan bisa ditekan padahal
      diam saja. Itu lebih buruk daripada tombolnya tidak ada. */
   if (bisaT){
+    /* ---- Tambah add-on baru ---- */
+    /* Slug dibuat dari nama, BUKAN diketik orang. Pola yang dijaga database:
+       ^[a-z0-9-]{2,40}$ dan harus unik. Membiarkan orang mengetiknya cuma
+       memindahkan aturan itu ke kepala mereka. */
+    const keSlug = s => String(s || '').toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')  /* buang tanda baca aksen */
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40)
+      .replace(/-+$/, '');                                /* jangan berakhir strip */
+
+    const tNama = $('t-nama'), tSat = $('t-satuan'), tMaks = $('t-maks-bungkus');
+    const gambarSlug = () => {
+      const s = keSlug(tNama.value);
+      $('t-slug-pratinjau').textContent = s || '—';
+    };
+    tNama.addEventListener('input', gambarSlug);
+
+    /* Kolom Maks hanya masuk akal untuk satuan 'unit' — dua satuan lain
+       jumlahnya ditentukan sistem, bukan pemesan. Menampilkannya di sana
+       mengundang orang mengisi batas yang tidak pernah dipakai. */
+    const KET_SATUAN = {
+      pesanan: 'Dikenakan sekali per pesanan, berapa pun jumlah orangnya.',
+      orang:   'Otomatis dikali jumlah penumpang di pesanan itu.',
+      unit:    'Pemesan sendiri yang mengetik jumlahnya, dibatasi kolom Maks.',
+    };
+    const terapkanSatuan = () => {
+      const u = tSat.value === 'unit';
+      tMaks.classList.toggle('sembunyi', !u);
+      if (!u) $('t-maks').value = '';
+      $('t-satuan-ket').textContent = KET_SATUAN[tSat.value] || '';
+    };
+    tSat.addEventListener('change', terapkanSatuan);
+    terapkanSatuan();
+
+    $('t-buat').onclick = async () => {
+      const nama = tNama.value.trim();
+      const slug = keSlug(nama);
+      const harga = angkaRp($('t-harga').value);
+      const satuan = tSat.value;
+      const maksRaw = $('t-maks').value.trim();
+      const maks = satuan === 'unit' && maksRaw !== '' ? angkaRp(maksRaw) : null;
+
+      if (!nama) return pesan('Nama add-on wajib diisi.', 7000);
+      /* Pola slug dijaga database; diperiksa di sini supaya penolakannya
+         datang sekarang, bukan setelah tombol ditekan. */
+      if (!/^[a-z0-9-]{2,40}$/.test(slug))
+        return pesan('<b>Nama tidak bisa dijadikan kode</b> Pakai minimal dua huruf '
+                   + 'atau angka. Tanda baca saja tidak cukup.', 9000);
+      if (harga === null) return pesan('Harga wajib diisi.', 7000);
+      /* 0 ditolak DI SINI, bukan dibiarkan tersimpan lalu gagal waktu dipesan.
+         buat_pesanan() menolak add-on berharga 0, jadi menyimpannya hanya
+         menghasilkan baris yang kelihatan aktif tapi selalu gagal dipesan. */
+      if (harga <= 0)
+        return pesan('<b>Harga tidak boleh 0</b> Add-on berharga 0 tersimpan tapi '
+                   + 'tidak akan bisa dipesan &mdash; database menolaknya saat '
+                   + 'pemesanan. Isi harganya dulu.', 10000);
+      if (maks !== null && maks <= 0)
+        return pesan('Maksimal harus lebih dari 0, atau dikosongkan.', 8000);
+
+      const b = $('t-buat');
+      b.disabled = true; b.innerHTML = '<span class="spin"></span> Menyimpan…';
+      const { error } = await DB.from('tambahan').insert({
+        slug, nama, satuan, harga, maks,
+        ket: $('t-ket').value.trim() || null,
+        aktif: true,
+      });
+      b.disabled = false; b.textContent = 'Tambahkan add-on';
+      if (error){
+        if (error.code === '23505')
+          return pesan(`<b>Ditolak</b> Kode <span class="mono">${esc(slug)}</span> `
+                     + 'sudah dipakai add-on lain. Ganti namanya sedikit.', 10000);
+        return gagalPesan(error);
+      }
+      await DB.rpc('catat_audit', { p_aksi:'tambahan.buat', p_objek:'tambahan:'+slug,
+        p_ke:nama, p_meta:{ harga, satuan, maks } });
+      pesan(`Add-on <b>${esc(nama)}</b> ditambahkan dan langsung muncul di halaman `
+          + 'pemesanan.', 9000);
+      tabVoucher();
+    };
+
     $('isi').querySelectorAll('[data-taktif]').forEach(b => b.onclick = async e => {
       e.preventDefault(); b.style.pointerEvents='none';
       const { error } = await DB.from('tambahan')

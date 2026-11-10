@@ -6171,17 +6171,60 @@ async function tabAtur(){
           mengubah komisi yang sudah berjalan.</b></div>`;
       })()}
       <div class="grid g3" style="margin-bottom:0">
+      ${(() => {
+        /* Label menyebut ANGKA AMBANG yang sedang terpasang, dan petunjuknya
+           menyebut rupiahnya. "sebelum/sesudah tembus" menuntut orang mengingat
+           angka dari kolom sebelah; "di bawah 20 tiket" tidak menuntut apa-apa.
+
+           Semua dihitung dari `data`, jadi begitu ambangnya diubah jadi 30,
+           labelnya ikut berbunyi "di bawah 30 tiket" tanpa ada yang perlu
+           mengedit teks. Angka yang ditulis tangan di label adalah cara
+           tercepat membuat layar berbohong setelah setelannya berubah. */
+        const amb   = Number(data.ambang_tier) || 0;
+        const bwh   = Number(data.komisi_bawah_persen) || 0;
+        const ats   = Number(data.komisi_atas_persen) || 0;
+        const disk2 = Number(data.diskon_persen) || 0;
+        const brt   = data.komisi_dari === 'bruto';
+        const hrg   = 150000;
+        const nilai = (tiket, persen) => {
+          const om = hrg * tiket;
+          return Math.round((brt ? om : Math.round(om * (100 - disk2) / 100)) * persen / 100);
+        };
+        /* Tanpa ambang yang masuk akal, contoh berangka tidak bisa dibuat —
+           lebih baik petunjuk polos daripada kalimat berisi "di bawah 0 tiket". */
+        const adaAmb = amb > 0;
+        return `
       ${f('diskon_persen','Diskon untuk pembeli (%)',
-        'Potongan harga di halaman pemesanan. Berlaku untuk semua pesanan.')}
+        `Potongan di halaman pemesanan, berlaku untuk SEMUA pesanan tanpa kode apa pun. `
+        + `Sekarang ${disk2}% &mdash; tiket ${rp(hrg)} dibayar `
+        + `${rp(Math.round(hrg * (100 - disk2) / 100))}.`)}
       ${f('ambang_tier','Tiket untuk naik komisi',
-        'Berapa tiket dalam satu periode sampai tarif komisi agen naik.')}
-      ${f('komisi_bawah_persen','Tarif komisi sebelum tembus (%)',
-        'Dipakai selama tiket agen masih di bawah angka di atas.')}
-      ${f('komisi_atas_persen','Tarif komisi sesudah tembus (%)',
-        'Begitu tembus, tarif ini berlaku untuk SELURUH tiket periode itu.')}
+        adaAmb ? `Sekarang <b>${amb} tiket</b> per periode. Di bawah itu tarifnya `
+                 + `${bwh}%, mulai tiket ke-${amb} naik jadi ${ats}%.`
+               : 'Isi jumlah tiket yang membuat tarif komisi agen naik.')}
+      ${f('komisi_bawah_persen',
+        adaAmb ? `Tarif komisi di bawah ${amb} tiket (%)` : 'Tarif komisi sebelum tembus (%)',
+        adaAmb ? `Agen dengan ${amb - 1} tiket @${rp(hrg)} &rarr; komisi `
+                 + `<b>${rp(nilai(amb - 1, bwh))}</b>.`
+               : 'Dipakai selama tiket agen masih di bawah ambang.')}
+      ${f('komisi_atas_persen',
+        adaAmb ? `Tarif komisi ${amb} tiket ke atas (%)` : 'Tarif komisi sesudah tembus (%)',
+        adaAmb ? `Agen dengan ${amb} tiket @${rp(hrg)} &rarr; komisi `
+                 + `<b>${rp(nilai(amb, ats))}</b> &mdash; tarif ini berlaku untuk `
+                 + `SELURUH ${amb} tiket, bukan hanya yang ke-${amb}.`
+               : 'Begitu tembus, tarif ini berlaku untuk SELURUH tiket periode itu.')}`;
+      })()}
       ${pil('komisi_dari','Komisi dihitung dari harga',
         [['bruto','Harga sebelum diskon (bruto)'],['neto','Harga sesudah diskon (neto)']],
-        'Belum diputuskan &mdash; sementara memakai harga sebelum diskon.')}
+        /* Petunjuknya MENGIKUTI pilihan yang sedang aktif. Versi sebelumnya
+           selalu berbunyi "sementara memakai harga sebelum diskon" — tetap
+           begitu walau pilihannya sudah neto, jadi layar menyatakan hal yang
+           berlawanan dengan isinya sendiri. */
+        data.komisi_dari === 'neto'
+          ? `Memakai harga <b>sesudah</b> diskon ${Number(data.diskon_persen)||0}% `
+            + `&mdash; komisi agen ikut turun bersama diskon.`
+          : `Memakai harga <b>sebelum</b> diskon &mdash; komisi agen tidak ikut `
+            + `turun walau pembeli dapat potongan. Belum diputuskan bersama Pak Dika.`)}
       ${pil('periode_reset','Hitungan tiket mulai nol lagi',
         [['bulanan','Tiap bulan'],['per_event','Tiap event'],['all_time','Tidak pernah — dihitung sejak awal']],
         'Menentukan kapan hitungan tiket agen kembali ke nol.')}

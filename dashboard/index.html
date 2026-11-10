@@ -4106,10 +4106,21 @@ async function popPesananBiro(b){
 
 /* ============ FOLLOW-UP ============ */
 async function tabFollowUp(){
-  const { data: semua, error } = await DB.from('pesanan')
+  if (S.periode === undefined) S.periode = periodeKini();
+  const bts = batasBulanWib(S.periode);
+
+  /* Disaring di server, batas bulan WIB — sama seperti tab Pesanan. Fungsi ini
+     dulu mengambil SELURUH pesanan pending/expired/batal sejak awal tanpa
+     batas jumlah sama sekali; makin lama makin berat, dan daftarnya jadi
+     tidak mungkin ditelusuri satu per satu. */
+  let q = DB.from('pesanan')
     .select('kode,status,fu_status,fu_terakhir,pemesan_nama,pemesan_hp,pemesan_hp2,total,dibuat,agen_id,produk(nama)')
-    .in('status',['pending','expired','cancel_pembeli'])
-    .order('dibuat',{ascending:false});
+    .in('status',['pending','expired','cancel_pembeli']);
+  if (bts) q = q.gte('dibuat', bts.mulai).lt('dibuat', bts.sampai);
+  const [{ data: semua, error }, { data: prd }] = await Promise.all([
+    q.order('dibuat',{ascending:false}),
+    DB.rpc('periode_pesanan'),
+  ]);
   if (error) return gagal(error);
 
   /* Peran agen hanya boleh melihat pesanannya sendiri. Untuk agen sungguhan RLS
@@ -4125,10 +4136,11 @@ async function tabFollowUp(){
     ['cancel_pembeli', 'Batal oleh pembeli', 'Dibatalkan sendiri. Tanya alasannya — ini umpan balik yang paling jujur.']
   ];
 
-  $('isi').innerHTML = grup.map(([st,judul,ket]) => {
+  $('isi').innerHTML = kartuPeriode(prd, S.periode, 'fu-periode') + grup.map(([st,judul,ket]) => {
     const arr = (data||[]).filter(o=>o.status===st);
     if (!arr.length) return `<div class="fugrp"><h3>${judul}
-      <span class="pill p-mute">0</span></h3><div class="hint">Tidak ada. Bagus.</div></div>`;
+      <span class="pill p-mute">0</span></h3><div class="hint">Tidak ada${
+      S.periode ? ' di ' + esc(namaPeriode(S.periode)) : ''}. Bagus.</div></div>`;
     return `<div class="fugrp">
       <h3>${judul} <span class="pill p-warn">${arr.length}</span></h3>
       <div class="hint" style="margin-bottom:9px">${ket}</div>
@@ -4167,6 +4179,8 @@ async function tabFollowUp(){
   $('isi').querySelectorAll('table[data-papan^="fu-"]').forEach(t =>
     lengkapiTabel(t, { id: t.dataset.papan, takUrut: [7],
       petunjuk: 'Cari kode, nama, produk…' }));
+
+  $('fu-periode').onchange = e => { S.periode = e.target.value || null; tabFollowUp(); };
 
   $('isi').querySelectorAll('[data-fu]').forEach(sel => sel.onchange = async () => {
     sel.disabled = true;

@@ -4567,7 +4567,12 @@ function pasangKelolaProduk(produkSemua){
           <label style="display:flex;gap:9px;align-items:flex-start;font-weight:400;cursor:pointer">
             <input type="checkbox" id="pr-vou" style="width:auto;margin-top:3px"
                    ${p?.dapat_voucher?'checked':''}>
-            <span style="font-size:13.5px">Pembeli produk ini dapat voucher</span></label></div>
+            <span style="font-size:13.5px">Pembeli paket ini <b>memperoleh</b> voucher
+              makan &amp; menginap<br>
+              <span style="color:var(--muted)">Bukan soal kode warga Pacitan. Yang
+              menentukan kode itu diterima atau tidak adalah model harganya:
+              hanya paket <b>bertingkat</b> yang punya harga warga Pacitan.</span>
+            </span></label></div>
       </div>
       <span class="sel2">
         <button type="button" class="btn" id="pr-simpan">${p?'Simpan perubahan':'Tambah produk'}</button>
@@ -6121,10 +6126,39 @@ async function tabAtur(){
         const sblm = komisi(amb - 1, bwh);
         const ssdh = komisi(amb, ats);
 
-        return `<div class="note"><b>Contoh dengan angka yang terpasang sekarang</b>
-          Anggap tiap tiket ${rp(harga)}, dan komisi dihitung dari
-          <b>${bruto ? 'harga sebelum diskon' : `harga sesudah diskon ${disk}%`}</b>.
+        /* Contoh harga memakai paket bertingkat yang sungguhan kalau ada,
+           supaya angkanya bukan karangan. */
+        const pb = (produk || []).find(x => x.bertingkat && x.harga_umum) || null;
+        const hUmum  = pb ? pb.harga_umum : 150000;
+        const hLokal = pb ? pb.harga_lokal : 100000;
+        const nmPaket = pb ? pb.nama : 'paket bertingkat';
+
+        return `<div class="note"><b>Tiga hal berbeda yang semuanya terasa seperti potongan harga</b>
+          Ini sumber kebingungan paling sering, jadi dipisah jelas-jelas.
           <br><br>
+          <b>1. Diskon untuk pembeli (${disk}%)</b> &mdash; kolom pertama di bawah.
+          Berlaku <b>otomatis untuk SEMUA pesanan</b>. Tidak perlu kode apa pun,
+          tidak peduli lewat agen atau tidak. ${esc(nmPaket)} ${rp(hUmum)}
+          &rarr; pembeli bayar ${rp(Math.round(hUmum * (100 - disk) / 100))}.
+          <br><br>
+          <b>2. Kode agen (referral)</b> &mdash; <b>tidak memberi potongan sama
+          sekali</b> ke pembeli. Harganya sama persis dengan yang memesan tanpa
+          kode. Gunanya hanya menentukan komisi masuk ke siapa.
+          <br><br>
+          <b>3. Voucher warga Pacitan</b> &mdash; <b>bukan persen</b>, tapi
+          <b>pindah daftar harga</b>. ${esc(nmPaket)} dari ${rp(hUmum)} jadi
+          ${rp(hLokal)}, lalu diskon ${disk}% tetap dikenakan di atasnya &rarr;
+          ${rp(Math.round(hLokal * (100 - disk) / 100))}. Hanya berlaku di paket
+          yang model harganya <b>bertingkat</b> &mdash; lihat kolom
+          "Kode warga Pacitan" di tabel Produk &amp; Harga di bawah.
+          <br><br>
+          Urutan hitungnya: harga dasar &times; jumlah orang &rarr; dikurangi
+          diskon ${disk}% &rarr; ditambah add-on.
+          <br><br>
+          <b>Komisi agen &mdash; contoh dengan angka yang terpasang sekarang</b><br>
+          Anggap tiap tiket ${rp(harga)}, komisi dihitung dari
+          <b>${bruto ? 'harga sebelum diskon' : `harga sesudah diskon ${disk}%`}</b>.
+          <br>
           Agen menjual <b>${amb - 1} tiket</b> bulan ini &rarr; tarifnya
           <b>${bwh}%</b> dari ${rp(sblm.dasar)} = <b>${rp(sblm.nilai)}</b>.<br>
           Menjual <b>${amb} tiket</b> &rarr; tarifnya naik jadi <b>${ats}%</b>
@@ -6133,7 +6167,6 @@ async function tabAtur(){
           Satu tiket tambahan menaikkan komisinya
           <b>${rp(ssdh.nilai - sblm.nilai)}</b>, karena tarif baru itu berlaku
           untuk <b>SELURUH ${amb} tiket</b> &mdash; bukan hanya tiket ke-${amb}.
-          <br><br>
           Karena berlaku surut begini, <b>mengubah tarif di tengah periode ikut
           mengubah komisi yang sudah berjalan.</b></div>`;
       })()}
@@ -6220,9 +6253,32 @@ async function tabAtur(){
         pemesanan. Mengubahnya <b>tidak mengubah pesanan yang sudah masuk</b> &mdash;
         tiap pesanan menyimpan harganya sendiri saat dibuat.</div>
       <table data-papan="produk">
+        <!-- JUDUL KOLOM DIPERJELAS 10 Nov 2026. Dulu satu kolom bernama
+             "Voucher" berisi DAPAT/TIDAK, dan itu terbaca sebagai "paket ini
+             bisa pakai kode voucher" — padahal maksudnya "pembeli paket ini
+             MEMPEROLEH voucher makan & menginap". Kata "dapat" di bahasa kita
+             punya dua arti, dan di kolom selebar itu tidak ada yang memilah.
+
+             Akibatnya nyata: agen membaca Cruise PROMO "DAPAT" lalu
+             menjanjikan harga voucher ke warga Pacitan, dan ditolak waktu
+             memesan — PROMO memang "harga sama untuk semua". Sebaliknya
+             Cruise Daily terbaca "TIDAK" padahal justru paket itu yang punya
+             harga warga Pacitan, selisih Rp50.000.
+
+             Sekarang dua hal itu jadi DUA KOLOM dengan nama yang menyebut
+             isinya sendiri. Tidak ada aturan harga yang diubah — yang berubah
+             hanya labelnya. Kolom "Kode warga Pacitan" dibaca dari kolom
+             bertingkat, karena itulah yang benar-benar menentukan diterima
+             tidaknya kode voucher di buat_pesanan().
+
+             CATATAN: komentar ini ada DI DALAM template literal JS, jadi
+             tanda petik-miring (backtick) tidak boleh dipakai di sini —
+             ia menutup string lebih awal dan seluruh berkas gagal diurai.
+             Sudah kejadian sekali waktu komentar ini ditulis. -->
         <thead><tr><th class="nw">Nama</th><th class="nw">Kode slug</th><th class="nw">Model harga</th>
           <th class="num">Lokal</th><th class="num">Umum</th><th class="num">Flat</th>
-          <th class="nw">Voucher</th><th class="nw">Status</th><th></th></tr></thead>
+          <th class="nw">Kode warga Pacitan</th><th class="nw">Bonus voucher</th>
+          <th class="nw">Status</th><th></th></tr></thead>
         <tbody>${(produk||[]).map(p => `<tr>
           <td class="nw"><b class="nama" title="${esc(p.nama)}">${esc(p.nama)}</b></td>
           <td class="mono nw" style="font-size:12px;color:var(--muted)">${esc(p.slug)}</td>
@@ -6232,9 +6288,17 @@ async function tabAtur(){
           <td class="num nw" data-urut="${p.harga_lokal ?? 0}">${p.harga_lokal!=null?rp(p.harga_lokal):'—'}</td>
           <td class="num nw" data-urut="${p.harga_umum ?? 0}">${p.harga_umum!=null?rp(p.harga_umum):'—'}</td>
           <td class="num nw" data-urut="${p.harga_flat ?? 0}">${p.harga_flat!=null?rp(p.harga_flat):'—'}</td>
+          <!-- Dibaca dari kolom bertingkat, BUKAN dari dapat_voucher: itulah
+               yang diperiksa buat_pesanan() waktu memutuskan kode voucher
+               diterima atau ditolak. Menampilkan kolom lain di sini berarti
+               layar menjanjikan hal yang tidak dikerjakan server.
+               (Tanpa backtick — komentar ini di dalam template literal JS.) -->
+          <td class="nw">${p.bertingkat
+            ? '<span class="pill p-ok">BISA</span>'
+            : '<span class="pill p-mute">TIDAK — harga sama untuk semua</span>'}</td>
           <td class="nw">${p.dapat_voucher
-            ? '<span class="pill p-ok">DAPAT</span>'
-            : '<span class="pill p-mute">TIDAK</span>'}</td>
+            ? '<span class="pill p-sea">makan &amp; menginap</span>'
+            : '<span class="pill p-mute">—</span>'}</td>
           <td class="nw">${p.aktif
             ? '<span class="pill p-ok">DIJUAL</span>'
             : '<span class="pill p-mute">TIDAK DIJUAL</span>'}</td>
@@ -6255,11 +6319,17 @@ async function tabAtur(){
         tidak mengubah tagihan orang yang memesan kemarin.</div>
     </div>`;
 
+  /* INDEKS KOLOM BERGESER +1 sejak kolom "Voucher" dipecah jadi dua
+     ("Kode warga Pacitan" dan "Bonus voucher") pada 10 Nov 2026.
+     Status: 7 -> 8. Kolom aksi (tak-urut): 8 -> 9.
+     Angka-angka ini tidak punya nama, jadi salahnya TIDAK menimbulkan error —
+     penyaring Status cuma akan menyaring kolom yang keliru, dan kolom aksi
+     jadi bisa diurutkan. Diam, dan baru ketahuan waktu dipakai. */
   lengkapiTabel('#isi table[data-papan="produk"]', {
-    id: 'produk', takUrut: [8], petunjuk: 'Cari nama produk atau slug…',
+    id: 'produk', takUrut: [9], petunjuk: 'Cari nama produk atau slug…',
     saring: [
       { kolom: 2, semua: 'Semua model harga', pilihan: ['BERTINGKAT','HARGA SAMA'] },
-      { kolom: 7, semua: 'Semua status',      pilihan: ['DIJUAL','TIDAK DIJUAL'] },
+      { kolom: 8, semua: 'Semua status',      pilihan: ['DIJUAL','TIDAK DIJUAL'] },
     ]
   });
   if (!ro) pasangKelolaProduk(produk || []);

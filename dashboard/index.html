@@ -6087,16 +6087,71 @@ async function tabAtur(){
   $('isi').innerHTML = `
     ${ro?'<div class="note w"><b>Hanya bisa dilihat</b>Pengaturan hanya bisa diubah Super Admin.</div>':''}
     <div class="note">Semua angka di sini bisa diubah tanpa ngoding. Harga belum fix — makanya semuanya jadi parameter.</div>
-    <div class="card"><h3>Diskon &amp; Komisi</h3><div class="grid g3" style="margin-bottom:0">
-      ${f('diskon_persen','Diskon konsumen (%)')}
-      ${f('ambang_tier','Ambang tier')}
-      ${f('komisi_bawah_persen','Komisi di bawah ambang (%)')}
-      ${f('komisi_atas_persen','Komisi di atas ambang (%)')}
-      ${pil('komisi_dari','Komisi dihitung dari',
-        [['bruto','Bruto — sebelum diskon'],['neto','Neto — sesudah diskon']],
-        '⬜ Belum kamu putuskan. Sementara: bruto')}
-      ${pil('periode_reset','Reset tier',
-        [['bulanan','Bulanan'],['per_event','Per event'],['all_time','All-time']])}
+    <!-- BAHASA KARTU INI DIGANTI 10 Nov 2026.
+         Label lamanya jargon ("Ambang tier", "Reset tier"), dan dua di
+         antaranya MENYESATKAN: "Komisi di bawah ambang / di atas ambang"
+         terbaca seperti tarif bertingkat — 20 tiket pertama 5%, sisanya 10%.
+         Kenyataannya retroaktif: begitu tembus, SEMUA tiket periode itu
+         kena tarif atas. papan_peringkat() memilih SATU tarif lalu
+         mengalikannya ke seluruh omzet, bukan memecah per tiket.
+         Salah baca di sini langsung jadi salah bayar komisi. -->
+    <div class="card"><h3>Diskon &amp; Komisi</h3>
+      ${(() => {
+        /* Contoh dihitung dari NILAI YANG SEDANG TERPASANG, bukan angka yang
+           ditulis tangan di sini — supaya contohnya tidak pernah berbohong
+           setelah angkanya diubah orang. */
+        const amb  = Number(data.ambang_tier) || 0;
+        const bwh  = Number(data.komisi_bawah_persen) || 0;
+        const ats  = Number(data.komisi_atas_persen) || 0;
+        const disk = Number(data.diskon_persen) || 0;
+        const bruto = data.komisi_dari === 'bruto';
+        const harga = 150000;
+
+        /* Dibandingkan dua keadaan yang BENAR-BENAR BISA TERJADI: satu tiket
+           di bawah ambang, dan pas di ambang. Percobaan pertama membandingkan
+           "amb tiket dengan tarif bawah" — keadaan mustahil, karena jumlah
+           segitu pasti sudah tembus. Contoh yang memakai keadaan mustahil
+           lebih buruk daripada tidak ada contoh. */
+        const komisi = (tiket, persen) => {
+          const omzet = harga * tiket;
+          const dasar = bruto ? omzet : Math.round(omzet * (100 - disk) / 100);
+          return { dasar, nilai: Math.round(dasar * persen / 100) };
+        };
+        if (!amb) return '';
+        const sblm = komisi(amb - 1, bwh);
+        const ssdh = komisi(amb, ats);
+
+        return `<div class="note"><b>Contoh dengan angka yang terpasang sekarang</b>
+          Anggap tiap tiket ${rp(harga)}, dan komisi dihitung dari
+          <b>${bruto ? 'harga sebelum diskon' : `harga sesudah diskon ${disk}%`}</b>.
+          <br><br>
+          Agen menjual <b>${amb - 1} tiket</b> bulan ini &rarr; tarifnya
+          <b>${bwh}%</b> dari ${rp(sblm.dasar)} = <b>${rp(sblm.nilai)}</b>.<br>
+          Menjual <b>${amb} tiket</b> &rarr; tarifnya naik jadi <b>${ats}%</b>
+          dari ${rp(ssdh.dasar)} = <b>${rp(ssdh.nilai)}</b>.
+          <br><br>
+          Satu tiket tambahan menaikkan komisinya
+          <b>${rp(ssdh.nilai - sblm.nilai)}</b>, karena tarif baru itu berlaku
+          untuk <b>SELURUH ${amb} tiket</b> &mdash; bukan hanya tiket ke-${amb}.
+          <br><br>
+          Karena berlaku surut begini, <b>mengubah tarif di tengah periode ikut
+          mengubah komisi yang sudah berjalan.</b></div>`;
+      })()}
+      <div class="grid g3" style="margin-bottom:0">
+      ${f('diskon_persen','Diskon untuk pembeli (%)',
+        'Potongan harga di halaman pemesanan. Berlaku untuk semua pesanan.')}
+      ${f('ambang_tier','Tiket untuk naik komisi',
+        'Berapa tiket dalam satu periode sampai tarif komisi agen naik.')}
+      ${f('komisi_bawah_persen','Tarif komisi sebelum tembus (%)',
+        'Dipakai selama tiket agen masih di bawah angka di atas.')}
+      ${f('komisi_atas_persen','Tarif komisi sesudah tembus (%)',
+        'Begitu tembus, tarif ini berlaku untuk SELURUH tiket periode itu.')}
+      ${pil('komisi_dari','Komisi dihitung dari harga',
+        [['bruto','Harga sebelum diskon (bruto)'],['neto','Harga sesudah diskon (neto)']],
+        'Belum diputuskan &mdash; sementara memakai harga sebelum diskon.')}
+      ${pil('periode_reset','Hitungan tiket mulai nol lagi',
+        [['bulanan','Tiap bulan'],['per_event','Tiap event'],['all_time','Tidak pernah — dihitung sejak awal']],
+        'Menentukan kapan hitungan tiket agen kembali ke nol.')}
     </div></div>
     <div class="card"><h3>Jalur pemesanan</h3>
       <div class="note"><b>Dua jalur bisa hidup bersamaan.</b>
@@ -6129,7 +6184,10 @@ async function tabAtur(){
            dan kalau suatu saat pencentangan per nama dihidupkan lagi
            tinggal kolom ini dimunculkan kembali di sini. -->
       ${f('kuota_kursi','Kuota kursi per keberangkatan','Dikosongkan = tanpa batas')}
-      ${f('kapasitas_izin','Kapasitas izin kapal','⬜ Belum diketahui — tanya syahbandar')}
+      <!-- "⬜" diganti teks biasa: di layar bentuknya persis kotak centang
+           kosong, jadi terbaca seperti kendali yang bisa diklik padahal cuma
+           penanda. Sudah bikin bingung sekali; tidak perlu dua kali. -->
+      ${f('kapasitas_izin','Kapasitas izin kapal','Belum diketahui — tanya syahbandar')}
       ${f('tahan_pending_jam','Order pending ditahan (jam)')}
     </div></div>
     <!-- DUA SETELAN NIK DIHAPUS DARI LAYAR 10 Nov 2026.

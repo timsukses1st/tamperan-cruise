@@ -787,6 +787,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-11f', 'PERBAIKAN: dashboard tidak bisa login (pengunci komisi latihan dipanggil sebelum waktunya)'],
   ['2026-11-11e', 'Komisi dikunci per pesanan; add-on ikut dikomisikan; kolom Komisi di tab Pesanan & Komisi'],
   ['2026-11-11d', 'Keberangkatan: KPI jadi "Hari keberangkatan" (dulu salah menghitung baris), fungsi layarnya dijelaskan'],
   ['2026-11-11c', 'Seluruh tab pakai bahasa lapangan: slug, tier, ambang, omzet, pax, audit diganti kata sehari-hari'],
@@ -1530,6 +1531,13 @@ function kueriLatihan(nama){
    di database yang dipakai waktu LUNAS. Perbedaan itu tidak apa-apa di sini,
    yang ditiru bentuk hasilnya, bukan jamnya. */
 function kunciKomisiLatihan(){
+  /* LATIH baru diisi waktu mode latihan DINYALAKAN (let LATIH = null di atas).
+     Versi pertama fungsi ini dipanggil di tingkat atas modul, jadi
+     LATIH.pengaturan melempar TypeError saat halaman dimuat — dan karena
+     modulnya mati di situ, tombol Masuk tidak pernah terpasang: dashboard
+     TIDAK BISA LOGIN sama sekali. Ditemukan Mas Dik 11 Nov 2026.
+     Penjaga ini membuat pemanggilan sebelum waktunya tidak berakibat apa-apa. */
+  if (!LATIH || !Array.isArray(LATIH.pesanan)) return;
   const st = LATIH.pengaturan[0] || {};
   const amb = Number(st.ambang_tier) || 0;
   const atas = Number(st.komisi_atas_persen) || 0;
@@ -1559,7 +1567,6 @@ function kunciKomisiLatihan(){
     o.komisi_tiket_kumulatif = kum[k];
   }
 }
-kunciKomisiLatihan();
 
 /* Fungsi database (RPC) versi latihan. Yang membaca mengembalikan angka yang
    konsisten dengan tabel di atas; yang menulis mengubah data di memori. */
@@ -2144,6 +2151,7 @@ function kosongkanCache(){
 async function masukLatihan(nyala){
   if (nyala){
     LATIH = dataLatihan();
+    kunciKomisiLatihan();        /* meniru trg_kunci_komisi atas data latihan */
     S.latihan = true;
     kosongkanCache();
     if (TUT.jalan) tutorTutup(false);

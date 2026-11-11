@@ -1,4 +1,51 @@
 <!doctype html>
+<!-- ============================================================
+     SOP BAHASA DASHBOARD  (ditetapkan Mas Dik, 11 Nov 2026)
+
+     ATURANNYA SATU KALIMAT:
+     Semua teks yang tampil ke pengguna memakai BAHASA LAPANGAN —
+     di SELURUH tab, termasuk tab Super Admin, Owner, dan Admin.
+     Bukan cuma tab Petugas Boarding.
+
+     Alasannya: tidak ada gunanya dua gaya bahasa dalam satu aplikasi.
+     Orang yang sama bisa pegang dua peran, dan orang baru tidak tahu
+     "dia sedang di layar yang mana".
+
+     KAMUS BAKU — pakai kolom kanan, jangan kolom kiri:
+       slug          -> kode tetap
+       tier          -> tarif / tingkat
+       ambang        -> batas
+       retroaktif    -> berlaku surut
+       omzet         -> penjualan / total penjualan
+       bruto / neto  -> harga sebelum diskon / harga sesudah diskon
+       pax           -> orang
+       audit (log)   -> catatan kegiatan
+       nominal       -> jumlah / jumlah uang
+       periode       -> bulan  (di aplikasi ini periode MEMANG satu bulan)
+       progress      -> perjalanan / kemajuan
+
+     YANG SENGAJA TIDAK DIGANTI, dan kenapa:
+       deposit, saldo, DP  -> istilah uang sehari-hari; biro dan admin
+                              sudah memakainya sendiri setiap hari.
+       manifest            -> istilah syahbandar di dermaga, bukan
+                              istilah IT. Menggantinya malah menjauhkan
+                              dari bahasa petugas pelabuhan.
+       boarding            -> sudah jadi kata kerja tim sendiri.
+       nama tabel & kolom database (tambahan, pax, slug, ambang_tier, ...)
+                           -> ini BUKAN teks yang tampil. Jangan diganti:
+                              menggantinya berarti migration + risiko,
+                              tanpa satu orang pun terbantu.
+
+     BATASNYA — penting, jangan dilanggar demi keringkasan:
+     Yang boleh disederhanakan adalah NAMA MEKANISMENYA.
+     AKIBAT PADA UANG harus tetap gamblang, walau kalimatnya jadi panjang.
+     Contoh: "komisi dihitung dari harga sesudah diskon" TIDAK boleh
+     dipotong jadi "komisi dari harga" — orang akan salah hitung komisi,
+     dan itu kerugian nyata, bukan sekadar bingung.
+
+     Mas Dik yang akan mengabari kalau ada kalimat yang kurang pas.
+     Ditegakkan oleh: _uji-bahasa.cjs
+     ============================================================ -->
 <html lang="id">
 <head>
 <meta charset="utf-8">
@@ -1665,7 +1712,7 @@ function rpcLatihan(nama, arg = {}){
       const n = arg.p_nominal;
       if (n !== null && n !== undefined){
         if (!(n > 0))
-          throw { code:'22023', message:'Nominal uang muka tidak masuk akal.' };
+          throw { code:'22023', message:'Jumlah uang mukanya tidak masuk akal.' };
         if (n > o.total)
           throw { code:'22023', message:'Uang muka tidak boleh melebihi total tagihan '
                                       + `(Rp${o.total}).` };
@@ -1695,7 +1742,7 @@ function rpcLatihan(nama, arg = {}){
       if (!['qris_dinamis','qris_statis','va','transfer','tunai'].includes(arg.p_metode))
         throw { code:'22023', message:`Metode pembayaran "${arg.p_metode}" tidak dikenal.` };
       if (!(arg.p_nominal > 0))
-        throw { code:'22023', message:'Nominal pembayaran harus lebih dari nol.' };
+        throw { code:'22023', message:'Jumlah pembayaran harus lebih dari nol.' };
       const o = P.find(x => x.kode === arg.p_kode);
       if (!o) throw { code:'22023', message:`Pesanan ${arg.p_kode} tidak ditemukan.` };
       if (['cancel_pembeli','cancel_cuaca','expired'].includes(o.status))
@@ -1703,7 +1750,7 @@ function rpcLatihan(nama, arg = {}){
                                     + 'Tidak bisa menerima pembayaran baru.' };
       const r = ringkasLat(o);
       if (arg.p_nominal > r.r_sisa)
-        throw { code:'22023', message:`Nominal Rp${arg.p_nominal} melebihi sisa tagihan `
+        throw { code:'22023', message:`Jumlah Rp${arg.p_nominal} melebihi sisa tagihan `
                                     + `Rp${r.r_sisa}. Sisa itulah yang maksimal bisa dicatat.` };
       (LATIH.pembayaran ||= []).push({
         id:'y-'+Math.random().toString(36).slice(2,8), pesanan_id:o.id,
@@ -1758,7 +1805,7 @@ function rpcLatihan(nama, arg = {}){
       }
       const sub = satuan * pax, disk = Math.round(sub * persen / 100), total = sub - disk;
       const dp = arg.p_dp || 0;
-      if (dp < 0)     throw { code:'22023', message:'Nominal DP tidak masuk akal.' };
+      if (dp < 0)     throw { code:'22023', message:'Jumlah DP tidak masuk akal.' };
       if (dp > total) throw { code:'22023', message:`DP Rp${dp} melebihi total tagihan Rp${total}.` };
 
       const n = (LATIH.pesanan.length + 1);
@@ -2191,8 +2238,8 @@ const TUTOR = {
          + 'atau hanya pesanan dari satu agen.' },
     { tab:'pesanan', cari:'#isi [data-bayar]',
       judul:'Mencatat uang masuk',
-      teks:'Tombol <b>Catat bayar</b> membuka formulir pencatatan: nominal, metode, dan '
-         + 'referensi transfernya. Nominalnya sudah terisi sebesar sisa tagihan &mdash; '
+      teks:'Tombol <b>Catat bayar</b> membuka formulir pencatatan: jumlah uang, cara bayar, dan '
+         + 'referensi transfernya. Jumlahnya sudah terisi sebesar sisa tagihan &mdash; '
          + 'ubah kalau yang masuk baru DP. Boleh dicatat berkali-kali sampai lunas; '
          + 'begitu sisanya nol, status pesanan ikut jadi LUNAS sendiri.' },
     { tab:'pesanan', cari:['#isi [data-porsi]','#isi [data-bayar]'],
@@ -2206,7 +2253,7 @@ const TUTOR = {
       teks:'<b>Batal</b> wajib disertai alasan &mdash; database menolak yang kosong. '
          + 'Kalau pesanannya sudah ada DP, setelah dibatalkan muncul tombol '
          + '<b>DP &rarr; deposit</b> untuk memindahkan uangnya jadi saldo. '
-         + 'Semuanya tercatat di audit atas nama Anda.' },
+         + 'Semuanya tercatat di catatan kegiatan atas nama Anda.' },
     { tab:'berangkat', cari:['#isi .kpi:nth-child(3)','#isi .kpi'], judul:'Keberangkatan',
       teks:'Tiket terjual per tanggal berangkat. Perhatikan "Belum dapat kapal" — kalau angkanya '
          + 'oranye, masih ada rombongan yang belum ditempatkan.' },
@@ -2289,8 +2336,8 @@ const TUTOR = {
       teks:'Ketik kode pesanan yang disebut pelanggan di chat. Tidak perlu lengkap.' },
     { tab:'pesanan', cari:'#isi [data-bayar]',
       judul:'Mencatat uang masuk',
-      teks:'Tombol <b>Catat bayar</b> membuka formulir pencatatan: nominal, metode, dan '
-         + 'referensi transfernya. Nominalnya terisi sebesar sisa tagihan &mdash; ubah '
+      teks:'Tombol <b>Catat bayar</b> membuka formulir pencatatan: jumlah uang, cara bayar, dan '
+         + 'referensi transfernya. Jumlahnya terisi sebesar sisa tagihan &mdash; ubah '
          + 'kalau yang masuk baru DP. Boleh dicatat berkali-kali sampai lunas; begitu '
          + 'sisanya nol, status pesanan ikut jadi LUNAS sendiri. Semuanya tercatat di '
          + 'audit atas nama Anda.' },
@@ -2314,9 +2361,9 @@ const TUTOR = {
          + 'tiap pesanan membekukan harganya sendiri saat dibuat.' },
     { tab:'atur', cari:'#isi .kpi, #isi .card', judul:'Diskon & komisi',
       teks:'Di kartu paling atas ada diskon konsumen dan tarif komisi agen. '
-         + '<b>Hati-hati dengan komisi:</b> tarifnya berlaku <b>retroaktif</b>, jadi mengubahnya '
+         + '<b>Hati-hati dengan komisi:</b> tarifnya <b>berlaku surut</b>, jadi mengubahnya '
          + 'di tengah bulan ikut mengubah bayaran seluruh tiket bulan itu. '
-         + 'Setiap perubahan tercatat di audit atas nama Anda.' },
+         + 'Setiap perubahan tercatat di catatan kegiatan atas nama Anda.' },
     /* cari:null -> kartu di tengah layar. Tombol Panduan ada di bar yang menempel,
        dan sorotan elemen menempel gampang meleset saat halaman tergulir. */
     { cari:null, judul:'Selesai',
@@ -2330,7 +2377,7 @@ const TUTOR = {
       teks:'Komisi & Pelanggan Saya untuk melihat penjualan dan komisi. '
          + 'Follow-Up Saya untuk mengejar pesanan yang belum jadi.' },
     { tab:'komisi', cari:'#isi .kpi', judul:'Komisi Anda',
-      teks:'Jumlah tiket, omzet, dan komisi Anda. Komisi naik dari 5% ke 10% setelah tembus '
+      teks:'Jumlah tiket, total penjualan, dan komisi Anda. Komisi naik dari 5% ke 10% setelah tembus '
          + '20 tiket, dan berlaku surut untuk semua tiket.' },
     { tab:'komisi', cari:'#isi table[data-papan="pelangganku"]',
       judul:'Pelanggan Anda',
@@ -2635,7 +2682,7 @@ function kartuPeriode(daftar, terpilih, idSel){
   const jml = Object.fromEntries((daftar || []).map(x => [x.r_periode, x.r_jumlah]));
   return `<div class="card" style="padding-top:14px;padding-bottom:14px">
     <div class="fld" style="margin:0;max-width:340px">
-      <label for="${idSel}">Periode</label>
+      <label for="${idSel}">Bulan</label>
       <select id="${idSel}">
         ${ada.map(p => `<option value="${esc(p)}" ${p === terpilih ? 'selected' : ''}>${
           esc(namaPeriode(p))}${jml[p] ? ` — ${jml[p]} pesanan` : ''}</option>`).join('')}
@@ -2682,20 +2729,20 @@ async function tabRingkas(){
     const dOm = Math.abs(a.omzet-b.omzet)/Math.max(Math.min(a.omzet,b.omzet),1)*100;
     const dKo = Math.abs(a.komisi-b.komisi)/Math.max(Math.min(a.komisi,b.komisi),1)*100;
     temuan = `<div class="note d">
-      <b>⚠️ Temuan dari data ini — tier berbasis jumlah tiket</b>
+      <b>⚠️ Temuan dari data ini — tarif dihitung dari JUMLAH TIKET</b>
       ${esc(a.nama)} ${rp(a.omzet)} (${a.tiket} tiket, tarif ${a.tarif}%) vs
       ${esc(b.nama)} ${rp(b.omzet)} (${b.tiket} tiket, tarif ${b.tarif}%).
-      Selisih omzet <b>${dOm.toFixed(0)}%</b>, selisih komisi <b>${dKo.toFixed(0)}%</b>.
+      Selisih penjualan <b>${dOm.toFixed(0)}%</b>, selisih komisi <b>${dKo.toFixed(0)}%</b>.
       ${a.tarif!==b.tarif
-        ? 'Omzet berbeda tapi komisi beda jauh lebih tajam, karena satu tembus ambang tier dan satu tidak. Leaderboard mengukur rupiah, tier mengukur jumlah tiket — dua ukuran yang bertentangan.'
-        : 'Tarif keduanya sama, jadi selisih komisinya proporsional dengan omzet. Inilah yang terjadi kalau tier dihitung dari omzet rupiah.'}
+        ? 'Penjualannya berbeda tapi komisinya beda jauh lebih tajam, karena yang satu tembus batas tiket dan yang satu tidak. Papan peringkat mengukur rupiah, tarif komisi mengukur jumlah tiket — dua ukuran yang bertentangan.'
+        : 'Tarif keduanya sama, jadi selisih komisinya sebanding dengan penjualannya. Inilah yang terjadi kalau tarif dihitung dari rupiah, bukan dari jumlah tiket.'}
     </div>`;
   }
 
   $('isi').innerHTML = `
     ${kartuPeriode(prd, S.periode, 'rk-periode')}
     <div class="grid g4">
-      <div class="kpi"><div class="k">Omzet</div><div class="v">${rp(k.omzet_total)}</div>
+      <div class="kpi"><div class="k">Penjualan</div><div class="v">${rp(k.omzet_total)}</div>
         <div class="d">${k.tiket_total||0} tiket terjual</div></div>
       <div class="kpi"><div class="k">Komisi Agen</div><div class="v">${rp(k.komisi_total)}</div>
         <div class="d">total ${L.length} agen</div></div>
@@ -2717,8 +2764,8 @@ async function tabRingkas(){
             <div class="num"><div style="font-weight:700">${rp(a.omzet)}</div>
               <div style="font-size:11.5px;color:var(--muted)">komisi ${rp(a.komisi)}</div></div>
           </div>`).join('') : '<div class="hint">Belum ada penjualan lunas.</div>'}
-        <div class="note w"><b>Tarif berlaku retroaktif</b>
-          Begitu tembus ambang tier, seluruh omzet periode itu ikut naik tarifnya — bukan hanya tiket sesudahnya.</div>
+        <div class="note w"><b>Tarif baru berlaku surut</b>
+          Begitu jumlah tiketnya tembus batas, seluruh penjualan bulan itu ikut naik tarifnya — bukan hanya tiket sesudahnya.</div>
       </div>
       <div class="card"><h3>Penjualan per Produk
         <span class="pill p-mute">${esc(namaPeriode(S.periode))}</span></h3>
@@ -2797,7 +2844,7 @@ async function tabPesanan(){
       <table data-papan="pesanan">
         <thead><tr><th class="nw">Kode</th><th class="nw">Dipesan</th><th class="nw">Berangkat</th>
             <th>Pembeli</th><th class="nw">WhatsApp</th><th class="nw">Produk</th>
-            <th class="num">Pax</th><th class="nw">Agen</th>
+            <th class="num">Orang</th><th class="nw">Agen</th>
             <th class="nw">Status</th><th class="num">Total</th></tr></thead><tbody>
         ${data.map(o=>{
           const st = STATUS[o.status]||[o.status,'p-mute'];
@@ -2989,7 +3036,7 @@ function pasangAksiStatus(muatUlang){
 
     if (ke === 'paid'){
       if (!confirm(`Tandai ${kode} LUNAS?\n\n`
-        + `Pastikan uangnya benar-benar sudah masuk. Perubahan ini tercatat di audit `
+        + `Pastikan uangnya benar-benar sudah masuk. Perubahan ini tercatat di catatan kegiatan `
         + `lengkap dengan nama Anda dan tidak bisa dihapus.`)) return;
     } else if (ke === 'pending'){
       if (!confirm(`Aktifkan lagi pesanan ${kode}?\n\n`
@@ -3013,7 +3060,7 @@ function pasangAksiStatus(muatUlang){
     }
     const kabar = { paid:'ditandai LUNAS', pending:'diaktifkan lagi',
                     cancel_pembeli:'dibatalkan' }[ke] || 'diperbarui';
-    pesan(`<b>${esc(kode)}</b> ${kabar}. Tercatat di audit atas nama Anda.`, 9000);
+    pesan(`<b>${esc(kode)}</b> ${kabar}. Tercatat di catatan kegiatan atas nama Anda.`, 9000);
     muatUlang();
   });
   pasangAksiUang(muatUlang);
@@ -3145,7 +3192,7 @@ function popJadwal(kode, tglSekarang, kapalNama, muatUlang){
     <div class="fld">
       <label for="jd-alasan">Alasan <span style="font-weight:400;color:var(--muted)">(opsional)</span></label>
       <input id="jd-alasan" autocomplete="off" placeholder="mis. cuaca buruk, diminta pemesan">
-      <div class="hint">Ikut tersimpan di audit log bersama nama Anda.</div>
+      <div class="hint">Ikut tersimpan di catatan kegiatan bersama nama Anda.</div>
     </div>
 
     ${kapalNama ? `<div class="note w"><b>Kapal ${esc(kapalNama)} akan dilepas</b>
@@ -3186,7 +3233,7 @@ function popJadwal(kode, tglSekarang, kapalNama, muatUlang){
     pesan(`<b>${esc(kode)}</b> dipindah ke ${tgl(baru)}.${
       r && r.r_kapal_dilepas
         ? ' Kapalnya dilepas &mdash; perlu dibagi ulang di tab Pembagian Kapal.'
-        : ''} Tercatat di audit atas nama Anda.`, 10000);
+        : ''} Tercatat di catatan kegiatan atas nama Anda.`, 10000);
     muatUlang();
   };
 }
@@ -3226,9 +3273,9 @@ async function popDp(kode, total, dpSekarang, muatUlang){
     </div>
 
     <div class="note"><b>Mengisi salah satu saja sudah cukup</b>
-      Kolom satunya ikut terisi sendiri. Yang masuk ke database hanya rupiahnya;
-      persen dihitung ulang dari total setiap kali ditampilkan. Jadi kalau nanti
-      jumlah orang atau add-on diubah, nominal DP ini <b>tidak ikut berubah</b> —
+      Kolom satunya ikut terisi sendiri. Yang benar-benar disimpan hanya rupiahnya;
+      persennya dihitung ulang dari total setiap kali ditampilkan. Jadi kalau nanti
+      jumlah orang atau add-on diubah, rupiah DP ini <b>tidak ikut berubah</b> &mdash;
       persennya yang bergeser. Kosongkan dua-duanya untuk membatalkan kesepakatan
       DP (pesanan kembali dianggap bayar penuh).</div>
 
@@ -3283,7 +3330,7 @@ async function popDp(kode, total, dpSekarang, muatUlang){
       return kirim(null, simpan,
         `Kesepakatan DP <b>${esc(kode)}</b> dihapus. Pesanan kembali dianggap bayar penuh.`);
     }
-    if (n < 0){ rpi.focus(); return pesan('Nominal tidak masuk akal.', 7000); }
+    if (n < 0){ rpi.focus(); return pesan('Jumlah uangnya tidak masuk akal.', 7000); }
     if (n > total){ rpi.focus();
       return pesan(`DP ${rp(n)} melebihi total tagihan ${rp(total)}. `
         + 'Database juga menolaknya.', 10000); }
@@ -3321,7 +3368,7 @@ async function popBayar(kode, muatUlang){
   const { q, tutup } = bukaLapis(`
     <h3>Pembayaran ${esc(kode)}</h3>
     <div class="hint" style="margin-bottom:12px">Setiap pencatatan tersimpan sebagai
-      baris tersendiri dan tercatat di audit atas nama Anda. Tidak bisa dihapus.</div>
+      baris tersendiri dan tercatat di catatan kegiatan atas nama Anda. Tidak bisa dihapus.</div>
 
     <div style="margin-bottom:14px">
       <div class="uang"><span>Total tagihan</span><b>${rp(r.r_total)}</b></div>
@@ -3337,7 +3384,7 @@ async function popBayar(kode, muatUlang){
     </div>
 
     ${riwayat.length ? `<div class="card scrollx" style="margin:0 0 14px;padding:0;border:0">
-      <table style="margin:0"><thead><tr><th class="nw">Waktu</th><th class="num">Nominal</th>
+      <table style="margin:0"><thead><tr><th class="nw">Waktu</th><th class="num">Jumlah</th>
         <th class="nw">Metode</th><th class="nw">Referensi</th><th class="nw">Dicatat oleh</th>
         </tr></thead><tbody>
         ${riwayat.map(b => `<tr>
@@ -3351,7 +3398,7 @@ async function popBayar(kode, muatUlang){
 
     ${bolehCatat ? `
       <div class="grid g2" style="margin-bottom:0">
-        <div class="fld"><label for="by-nominal">Nominal diterima</label>
+        <div class="fld"><label for="by-nominal">Jumlah uang diterima</label>
           <input id="by-nominal" inputmode="numeric" autocomplete="off"
                  value="${kurangDp > 0 ? kurangDp : r.r_sisa}" placeholder="mis. 10000000">
           <div class="hint">${kurangDp > 0
@@ -3390,9 +3437,9 @@ async function popBayar(kode, muatUlang){
   tbl.onclick = async () => {
     const n = angkaRp(nom.value);
     if (n === null || n <= 0){ nom.focus();
-      return pesan('Nominal harus angka lebih dari nol.', 7000); }
+      return pesan('Jumlah uang harus angka lebih dari nol.', 7000); }
     if (n > r.r_sisa){ nom.focus();
-      return pesan(`Nominal ${rp(n)} melebihi sisa tagihan ${rp(r.r_sisa)}. `
+      return pesan(`Jumlah ${rp(n)} melebihi sisa tagihan ${rp(r.r_sisa)}. `
         + 'Database juga menolaknya.', 10000); }
 
     tbl.disabled = true; tbl.innerHTML = '<span class="spin"></span> Menyimpan…';
@@ -3735,7 +3782,7 @@ async function tabBiro(){
       <h3>Mutasi Deposit <span class="pill p-mute">${mutasi.length}</span></h3>
       <table data-papan="mutasi">
         <thead><tr><th class="nw">Waktu</th><th class="nw">Pemilik saldo</th>
-          <th class="nw">Arah</th><th class="num">Nominal</th>
+          <th class="nw">Arah</th><th class="num">Jumlah</th>
           <th>Keterangan</th><th class="nw">Dicatat oleh</th></tr></thead>
         <tbody>${mutasi.length ? mutasi.map(m => `<tr>
           <td class="nw" style="color:var(--muted)"
@@ -4278,7 +4325,7 @@ async function tabManifest(){
       <table data-papan="manifest">
         <thead><tr><th class="nw">Berangkat</th><th class="nw">Kapal</th><th class="nw">Kode</th>
           <th>Pemesan</th><th class="nw">WhatsApp</th><th class="nw">Produk</th>
-          <th class="num">Pax</th><th class="num">Anak</th><th class="num">Naik</th>
+          <th class="num">Orang</th><th class="num">Anak</th><th class="num">Naik</th>
           ${kol.nik ? '<th class="nw">NIK pemesan</th>' : ''}
           ${kol.alamat ? '<th>Alamat sesuai KTP</th>' : ''}
           <th class="nw">Status</th></tr></thead>
@@ -4378,7 +4425,7 @@ async function tabAgen(){
       <div class="grid g2">
         <div class="fld"><label for="ag-nama">Nama agen</label>
           <input id="ag-nama" maxlength="60" placeholder="mis. Budi Santoso" autocomplete="off">
-          <div class="hint">Nama ini muncul di papan peringkat dan di catatan audit.</div></div>
+          <div class="hint">Nama ini muncul di papan peringkat dan di catatan kegiatan.</div></div>
         <div class="fld"><label for="ag-kode">Kode referral</label>
           <input id="ag-kode" maxlength="32" spellcheck="false" autocapitalize="characters"
                  placeholder="mis. BUDI2026" autocomplete="off"
@@ -4425,11 +4472,12 @@ async function tabAgen(){
       Pelanggan yang memakai kode seorang agen akan diarahkan ke nomor agen itu setelah
       pesanannya tersimpan. Perubahan di sini <b>langsung berlaku</b> di situs — tidak perlu
       deploy ulang. Agen yang nomornya kosong, pelanggannya jatuh ke nomor pusat.
-      Setiap perubahan tercatat di audit.</div>
+      Setiap perubahan tercatat di catatan kegiatan.</div>
     <div class="note"><b>Kenapa nomor WA ada di tabel terpisah</b>
-      RLS bekerja per baris, bukan per kolom. Agen boleh melihat nama agen lain untuk leaderboard —
-      kalau nomornya ikut di baris yang sama, nomornya ikut terbaca. Jadi kolomnya dipisah ke tabel
-      sendiri, bukan disembunyikan di tampilan.</div>`;
+      Agen boleh melihat nama agen lain di papan peringkat. Kalau nomor WA ikut
+      disimpan di baris yang sama, nomor itu ikut kebaca mereka. Jadi nomornya
+      disimpan terpisah &mdash; benar-benar tidak terkirim, bukan cuma tidak
+      ditampilkan di layar.</div>`;
 
   $('isi').querySelectorAll('[data-biro]').forEach(b => b.onclick = async e => {
     e.preventDefault(); b.style.pointerEvents='none';
@@ -4702,7 +4750,7 @@ function pasangKelolaProduk(produkSemua){
         <div class="fld"><label for="pr-nama">Nama produk</label>
           <input id="pr-nama" maxlength="80" autocomplete="off"
                  placeholder="mis. Sunset Trip" value="${esc(p?.nama ?? '')}"></div>
-        <div class="fld"><label for="pr-slug">Kode slug</label>
+        <div class="fld"><label for="pr-slug">Kode tetap</label>
           <input id="pr-slug" maxlength="40" spellcheck="false" autocomplete="off"
                  placeholder="mis. sunset-trip" value="${esc(p?.slug ?? '')}"
                  style="font-family:ui-monospace,Menlo,monospace">
@@ -4804,9 +4852,9 @@ async function simpanProduk(p, produkSemua){
 
   if (!nama) return pesan('Nama produk belum diisi.', 6000);
   if (!SLUG_POLA.test(slug))
-    return pesan('Kode slug harus 2&ndash;40 karakter, hanya huruf kecil, angka, dan strip.', 9000);
+    return pesan('Kode tetap harus 2&ndash;40 karakter, hanya huruf kecil, angka, dan strip.', 9000);
   if (produkSemua.some(x => x.id !== p?.id && x.slug === slug))
-    return pesan(`Kode slug <b>${esc(slug)}</b> sudah dipakai produk lain.`, 8000);
+    return pesan(`Kode tetap <b>${esc(slug)}</b> sudah dipakai produk lain.`, 8000);
   if (urut && !/^[0-9]{1,3}$/.test(urut))
     return pesan('Urutan harus angka 0&ndash;999.', 6000);
 
@@ -5144,7 +5192,7 @@ async function simpanKode(id, kodeLama, nama, inp, tutup){
     if (error.code === '23514') return pesan('<b>Ditolak</b> Format kode ditolak database.', 9000);
     return gagalPesan(error);
   }
-  pesan(`Kode ${nama} diubah ke ${baru}. Perubahan tercatat di audit.`);
+  pesan(`Kode ${nama} diubah ke ${baru}. Perubahan tercatat di catatan kegiatan.`);
   tabAgen();
 }
 
@@ -5175,7 +5223,7 @@ async function tabBerangkat(){
       <h3>Tiket Terjual per Tanggal Keberangkatan</h3>
       <table data-papan="berangkat">
         <thead><tr><th class="nw">Tanggal</th><th class="nw">Pelayaran</th>
-          <th class="num">Pesanan</th><th class="num">Pax</th><th class="num">Anak</th>
+          <th class="num">Pesanan</th><th class="num">Orang</th><th class="num">Anak</th>
           <th class="num">Belum berkapal</th>
           ${S.peran==='admin' ? '' : '<th class="num">Nilai</th>'}</tr></thead>
         <tbody>${baris.length ? baris.map(b=>`<tr>
@@ -5306,7 +5354,7 @@ async function tabKapal(){
       <div class="scrollx">
       <table>
         <thead><tr><th class="nw">Kode</th><th class="nw">Pemesan</th><th class="nw">Pelayaran</th>
-          <th class="num">Pax</th><th class="nw">Status</th><th class="nw">Kapal</th></tr></thead>
+          <th class="num">Orang</th><th class="nw">Status</th><th class="nw">Kapal</th></tr></thead>
         <tbody>${daftar.map(o=>{
           const st = STATUS[o.status]||[o.status,'p-mute'];
           return `<tr>
@@ -5326,10 +5374,11 @@ async function tabKapal(){
       </table></div></div>`;
   }).join('') + `
     <div class="note"><b>Kenapa total pesanan tidak bisa diubah dari sini</b>
-      RLS menjaga per baris, bukan per kolom. Kalau sebuah peran diberi izin menulis
-      ke tabel pesanan, dia bisa mengubah kolom apa pun di baris itu &mdash; termasuk
-      total yang dibayar. Jadi pembagian kapal lewat satu fungsi khusus yang hanya
-      menyentuh kolom kapal, dan setiap perubahannya tercatat di audit.
+      Izin menulis di sistem ini berlaku untuk satu baris pesanan utuh &mdash; tidak
+      bisa dipilih per kolom. Kalau peran ini boleh menulis ke pesanan, dia otomatis
+      juga bisa mengubah total yang dibayar. Jadi pembagian kapal dijalankan lewat
+      jalur khusus yang cuma menyentuh kolom kapal, dan setiap perubahannya tercatat
+      di catatan kegiatan.
       Harga <b>katalog</b> memang bisa diubah Super Admin, Owner, dan Admin &mdash;
       tapi itu harga untuk pesanan berikutnya, bukan total pesanan yang sudah jadi.</div>`
   : `<div class="card"><div class="note w"><b>Belum ada keberangkatan</b>
@@ -5447,9 +5496,9 @@ async function tabVoucher(){
         Totalnya = harga per unit &times; angka yang diketik pemesan. Kalau add-on
         ini cuma masuk akal sekali per pesanan (mis. sewa drone), isi
         <b>Maksimal = 1</b> &mdash; hasilnya sama dengan "per pesanan".</div>
-      <div class="note"><b>Kode slug dibuat otomatis dari namanya</b>
+      <div class="note"><b>Kode tetapnya dibuat otomatis dari nama</b>
         <span class="mono" id="t-slug-pratinjau">—</span> &mdash; huruf kecil, angka,
-        dan strip. Slug ini yang dikirim halaman pemesanan ke database waktu orang
+        dan strip. Kode inilah yang dipakai sistem untuk mengenali add-on waktu orang
         memilih add-on, jadi <b>tidak bisa diubah lagi</b> setelah dibuat. Nama
         tampilannya masih bisa diganti kapan saja.</div>
       <button type="button" class="btn" id="t-buat">Tambahkan add-on</button>
@@ -5479,7 +5528,7 @@ async function tabVoucher(){
         Semua add-on <b>baru</b> dibuat dengan satuan ini.<br>
         Dua satuan lama masih dipakai baris yang sudah ada dan tetap berjalan:
         <b>per pesanan</b> = dikenakan sekali, berapa pun jumlah penumpang ·
-        <b>per orang</b> = otomatis dikali jumlah pax.</div>
+        <b>per orang</b> = otomatis dikali jumlah orang di pesanan itu.</div>
       <div class="note w"><b>Add-on berharga Rp0 tidak bisa dipesan</b>
         Database menolaknya dengan sengaja — harga 0 hampir selalu berarti harganya
         belum ditentukan, bukan benar-benar gratis. Isi harganya dulu, baru aktifkan.</div>
@@ -5659,7 +5708,7 @@ async function simpanHarga(t, inp, tutup){
   const { error } = await DB.from('tambahan').update({ harga: baru }).eq('id', t.id);
   inp.disabled = false;
   if (error) return gagalPesan(error);
-  pesan(`Harga ${esc(t.nama)} jadi ${rp(baru)}. Tercatat di audit.`, 9000);
+  pesan(`Harga ${esc(t.nama)} jadi ${rp(baru)}. Tercatat di catatan kegiatan.`, 9000);
   tabVoucher();
 }
 
@@ -6082,7 +6131,7 @@ async function tabAkses(){
                    value="${esc(S.pengguna.find(u=>u.id===S.uid)?.nama || '')}">
             <button type="button" class="btn ghost" id="nm-simpan" style="padding:9px 16px">Simpan</button>
           </div>
-          <div class="hint">Nama ini yang muncul di catatan audit untuk setiap tindakanmu.</div></div>
+          <div class="hint">Nama ini yang muncul di catatan kegiatan untuk setiap tindakanmu.</div></div>
         <div class="fld"><label>Email</label>
           <input value="${esc(S.email)}" disabled>
           <div class="hint">Email tidak bisa diubah dari sini — dia yang menautkan akun ke sistem login.</div></div>
@@ -6113,7 +6162,7 @@ async function tabAkses(){
       <div class="note"><b>Menonaktifkan, bukan menghapus</b>
         Akun yang dinonaktifkan langsung kehilangan seluruh akses — fungsi
         <span class="mono">peran()</span> hanya mengembalikan peran untuk profil aktif.
-        Jejak pekerjaannya di audit tetap punya pemilik, itu sebabnya tidak dihapus.</div>
+        Jejak pekerjaannya di catatan kegiatan tetap punya pemilik, itu sebabnya tidak dihapus.</div>
       ${bisa ? `<div style="border-top:1px solid var(--line);margin-top:18px;padding-top:16px">
         <h3 style="margin:0 0 4px;font-size:15px">Tambah User</h3>
         <div class="hint" style="margin-bottom:12px">Akun dibuat dengan <b>sandi sementara</b>.
@@ -6249,7 +6298,7 @@ async function tabAkses(){
         { p_user: id, p_peran: ke, p_agen: agenId });
       sel.disabled = false;
       if (error){ sel.value = u.peran; return gagalPesan(error); }
-      pesan(`Peran ${esc(u?.nama)} jadi ${esc(PERAN_LABEL[ke]?.[0])}. Tercatat di audit.`, 9000);
+      pesan(`Peran ${esc(u?.nama)} jadi ${esc(PERAN_LABEL[ke]?.[0])}. Tercatat di catatan kegiatan.`, 9000);
       tabAkses();
     });
 
@@ -6275,7 +6324,7 @@ async function tabAkses(){
       const { error } = await DB.rpc('ubah_aktif_pengguna',
         { p_user: b.dataset.aktif, p_aktif: !nonaktif });
       if (error){ b.style.pointerEvents = ''; return gagalPesan(error); }
-      pesan(`${esc(u?.nama)} ${nonaktif ? 'dinonaktifkan' : 'diaktifkan'}. Tercatat di audit.`, 9000);
+      pesan(`${esc(u?.nama)} ${nonaktif ? 'dinonaktifkan' : 'diaktifkan'}. Tercatat di catatan kegiatan.`, 9000);
       tabAkses();
     });
 
@@ -6499,7 +6548,7 @@ async function tabAtur(){
                : 'Begitu tembus, tarif ini berlaku untuk SELURUH tiket periode itu.')}`;
       })()}
       ${pil('komisi_dari','Komisi dihitung dari harga',
-        [['bruto','Harga sebelum diskon (bruto)'],['neto','Harga sesudah diskon (neto)']],
+        [['bruto','Harga sebelum diskon'],['neto','Harga sesudah diskon']],
         /* Petunjuknya MENGIKUTI pilihan yang sedang aktif. Versi sebelumnya
            selalu berbunyi "sementara memakai harga sebelum diskon" — tetap
            begitu walau pilihannya sudah neto, jadi layar menyatakan hal yang
@@ -6618,7 +6667,7 @@ async function tabAtur(){
              tanda petik-miring (backtick) tidak boleh dipakai di sini —
              ia menutup string lebih awal dan seluruh berkas gagal diurai.
              Sudah kejadian sekali waktu komentar ini ditulis. -->
-        <thead><tr><th class="nw">Nama</th><th class="nw">Kode slug</th><th class="nw">Model harga</th>
+        <thead><tr><th class="nw">Nama</th><th class="nw">Kode tetap</th><th class="nw">Model harga</th>
           <th class="num">Lokal</th><th class="num">Umum</th><th class="num">Flat</th>
           <th class="nw">Kode warga Pacitan</th><th class="nw">Bonus voucher</th>
           <th class="nw">Status</th><th></th></tr></thead>
@@ -6669,7 +6718,7 @@ async function tabAtur(){
      penyaring Status cuma akan menyaring kolom yang keliru, dan kolom aksi
      jadi bisa diurutkan. Diam, dan baru ketahuan waktu dipakai. */
   lengkapiTabel('#isi table[data-papan="produk"]', {
-    id: 'produk', takUrut: [9], petunjuk: 'Cari nama produk atau slug…',
+    id: 'produk', takUrut: [9], petunjuk: 'Cari nama produk atau kodenya…',
     saring: [
       { kolom: 2, semua: 'Semua model harga', pilihan: ['BERTINGKAT','HARGA SAMA'] },
       { kolom: 8, semua: 'Semua status',      pilihan: ['DIJUAL','TIDAK DIJUAL'] },
@@ -6717,8 +6766,8 @@ async function tabAtur(){
       p_meta: Object.keys(beda).length ? beda : null,
     });
     pesan(eAudit
-      ? 'Pengaturan tersimpan, tapi pencatatan audit gagal: ' + esc(eAudit.message)
-      : `Pengaturan tersimpan. ${Object.keys(beda).length} perubahan tercatat di audit log.`,
+      ? 'Pengaturan tersimpan, tapi pencatatan kegiatan gagal: ' + esc(eAudit.message)
+      : `Pengaturan tersimpan. ${Object.keys(beda).length} perubahan tercatat di catatan kegiatan.`,
       eAudit ? 12000 : undefined);
   };
 }
@@ -6761,7 +6810,7 @@ async function tabKomisi(){
 
   $('isi').innerHTML = `
     ${kartuPeriode(prd, S.periode, 'km-periode')}
-    <div class="card"><h3>Progress Tier Komisi
+    <div class="card"><h3>Perjalanan Menuju Tarif Komisi Lebih Tinggi
       <span class="pill p-mute">${esc(namaPeriode(S.periode))}</span></h3>
       <div style="display:flex;justify-content:space-between;font-size:13.5px">
         <span><b>${saya.tiket} tiket</b>${ambang?` dari ${ambang}`:''}</span>
@@ -6769,26 +6818,26 @@ async function tabKomisi(){
           ? 'p-ok' : 'p-warn'}">TARIF ${saya.tarif}%</span></div>
       ${ambang ? `<div class="prog"><i style="width:${
         Math.min(100, saya.tiket / ambang * 100)}%"></i></div>` : ''}
-      <div style="font-size:12.5px;color:var(--muted)">Tarif berlaku <b>retroaktif</b> ke seluruh
-        ${saya.tiket} tiket, bukan hanya tiket sesudah ambang.
+      <div style="font-size:12.5px;color:var(--muted)">Tarif ini berlaku surut ke seluruh
+        ${saya.tiket} tiket, bukan hanya tiket sesudah batas.
         ${ambang && sisa ? ` Kurang <b>${sisa} tiket</b> lagi menuju tarif
           ${aturTier.r_atas ? Number(aturTier.r_atas) + '%' : 'lebih tinggi'}.` : ''}
-        ${!ambang ? ' <b>Ambang tier belum terbaca</b> — progress disembunyikan '
+        ${!ambang ? ' <b>Batas tiket belum terbaca</b> — grafiknya disembunyikan '
           + 'daripada menampilkan angka yang belum tentu benar.' : ''}</div>
     </div>
     <div class="grid g4">
       <div class="kpi"><div class="k">Komisi Berjalan</div><div class="v">${rp(saya.komisi)}</div>
         <div class="d">belum final, bisa berubah</div></div>
       <div class="kpi"><div class="k">Tarif Saat Ini</div><div class="v">${saya.tarif}%</div>
-        <div class="d">retroaktif ke semua tiket</div></div>
+        <div class="d">berlaku surut ke semua tiket</div></div>
       <div class="kpi"><div class="k">Tiket Terjual</div><div class="v">${saya.tiket}</div>
-        <div class="d">omzet ${rp(saya.omzet)}</div></div>
+        <div class="d">penjualan ${rp(saya.omzet)}</div></div>
       <div class="kpi"><div class="k">Peringkat</div><div class="v">${pos||'—'}</div>
         <div class="d">dari ${L.length} agen</div></div>
     </div>
     <div class="note w"><b>Kenapa ditulis "berjalan", bukan angka final</b>
-      Komisi bersifat retroaktif — begitu tembus ambang, seluruh tiket ikut naik tarifnya.
-      Jadi angkanya berubah selama periode masih jalan, dan baru dikunci saat komisi dibayarkan.</div>
+      Komisi berlaku surut — begitu jumlah tiketnya tembus batas, seluruh tiket ikut naik tarifnya.
+      Jadi angkanya berubah selama bulan ini masih jalan, dan baru dikunci saat komisi dibayarkan.</div>
     <div class="card"><h3>Top Penjualan</h3>
       ${L.map((a,i)=>{
         const aku=a.agen_id===S.agenId;
@@ -6807,7 +6856,7 @@ async function tabKomisi(){
     <div class="card scrollx"><h3>Pelanggan Saya <span class="pill p-mute">${pesananku.length}</span></h3>
       <table data-papan="pelangganku">
         <thead><tr><th class="nw">Kode</th><th class="nw">Tgl</th><th>Pembeli</th><th class="nw">WhatsApp</th>
-            <th class="nw">Produk</th><th class="num">Pax</th><th class="num">Total</th><th class="nw">Status</th></tr></thead>
+            <th class="nw">Produk</th><th class="num">Orang</th><th class="num">Total</th><th class="nw">Status</th></tr></thead>
         <tbody>${pesananku.map(o=>{
           const st=STATUS[o.status]||[o.status,'p-mute'];
           return `<tr><td class="mono nw">${esc(o.kode)}</td>
@@ -6882,7 +6931,7 @@ async function tabBoarding(){
     <div class="card scrollx"><h3>Daftar Boarding <span class="pill p-mute">${baris.length}</span></h3>
       <table data-papan="boarding">
         <thead><tr><th class="nw">Berangkat</th><th class="nw">Kapal</th><th class="nw">Kode</th>
-            <th>Pemesan</th><th class="nw">Produk</th><th class="num">Pax</th>
+            <th>Pemesan</th><th class="nw">Produk</th><th class="num">Orang</th>
             <th class="nw">Naik</th><th class="nw">Status</th></tr></thead>
         <tbody>${baris.length ? baris.map(o => `<tr>
             <td class="nw" data-urut="${o.tanggal_berangkat?Date.parse(o.tanggal_berangkat):0}">${o.tanggal_berangkat
@@ -6915,7 +6964,7 @@ async function tabBoarding(){
       <div class="note w"><b>Angka ini dipakai untuk menghitung uang</b>
         Selisih antara yang dipesan dan yang naik dipindahkan jadi saldo deposit
         lewat tombol <b>Porsi &rarr; deposit</b> di tab Pesanan. Jadi isi apa adanya.
-        Setiap perubahan tercatat di audit atas nama Anda, dan setelah porsinya
+        Setiap perubahan tercatat di catatan kegiatan atas nama Anda, dan setelah porsinya
         terlanjur dipindahkan ke deposit, angkanya terkunci.</div>
     </div>`;
 

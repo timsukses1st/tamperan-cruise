@@ -773,9 +773,45 @@ function alamatLayar(nama, peran){
   return { tab: nama, sub: undefined };
 }
 
+/* ---- NOMOR VERSI & DAFTAR PERUBAHAN ----
+   Dipasang 11 Nov 2026 atas permintaan Mas Dik: supaya begitu membuka
+   dashboard langsung kelihatan yang terpasang di Vercel itu versi mana, tanpa
+   perlu membandingkan isi berkas.
+
+   ATURAN MERAWATNYA — dibaca sebelum mengubah apa pun di berkas ini:
+   setiap kali berkas ini dikirim ulang ke Mas Dik, TAMBAHKAN satu baris baru
+   di PALING ATAS daftar. Jangan menimpa baris lama. Nomornya tanggal + huruf
+   urut hari itu (2026-11-11c = perubahan ketiga tanggal 11 November).
+
+   Baris paling atas itulah yang tampil di layar. Nomor versi yang tidak
+   diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
+   yakin sedang melihat versi terbaru padahal bukan. */
+const RIWAYAT = [
+  ['2026-11-11e', 'Komisi dikunci per pesanan; add-on ikut dikomisikan; kolom Komisi di tab Pesanan & Komisi'],
+  ['2026-11-11d', 'Keberangkatan: KPI jadi "Hari keberangkatan" (dulu salah menghitung baris), fungsi layarnya dijelaskan'],
+  ['2026-11-11c', 'Seluruh tab pakai bahasa lapangan: slug, tier, ambang, omzet, pax, audit diganti kata sehari-hari'],
+  ['2026-11-11b', 'Add-on baru selalu per unit; pilihan satuan dihapus dari formulir'],
+  ['2026-11-11a', 'Istilah "tambahan" diganti "Add-on"; setelan Leaderboard yang mati dihapus'],
+  ['2026-11-10a', 'Penyaring bulan di 4 tab; setelan mati dihapus; panduan scan boarding diarsipkan'],
+  ['2026-11-09a', 'Jalur pesanan tanpa kode agen; tombol ubah tanggal berangkat; lubang RLS agen ditutup'],
+];
+const VERSI = RIWAYAT[0][0];
+
 function gambarMenu(peran){
   $('judul').textContent    = JUDUL[peran][0];
-  $('subjudul').textContent = JUDUL[peran][1];
+  /* Pakai innerHTML, bukan textContent: nomor versinya ikut di baris yang sama
+     supaya tidak memakan tinggi layar sendiri. Judulnya dari daftar tetap di
+     kode, bukan dari isian orang, jadi aman. */
+  $('subjudul').innerHTML = JUDUL[peran][1]
+    + ` &middot; <a href="#" id="tautan-versi" style="color:var(--sea);text-decoration:none"`
+    + ` title="Klik untuk melihat daftar perubahan">versi ${VERSI}</a>`;
+  $('tautan-versi').onclick = e => {
+    e.preventDefault();
+    pesan('<b>Daftar perubahan terakhir</b>'
+      + RIWAYAT.slice(0, 6).map(([v, k], i) =>
+          `<div style="margin-top:5px">${i ? '' : '<b>'}<span class="mono">${v}</span> &mdash; ${k}${i ? '' : '</b> &larr; yang terpasang sekarang'}</div>`
+        ).join(''), 20000);
+  };
   const menu = menuPeran(peran);
   $('navTab').innerHTML = menu.map(([k,l],i)=>
     `<button class="dbtab${i?'':' on'}" data-tab="${k}">${l}</button>`).join('');
@@ -1484,6 +1520,47 @@ function kueriLatihan(nama){
   return api;
 }
 
+/* Meniru trigger trg_kunci_komisi di database: tarif ditentukan saat pesanan
+   LUNAS lalu dikunci di baris pesanan. Dijalankan sekali di sini supaya layar
+   latihan menampilkan angka yang BENTUKNYA sama dengan yang asli — kalau
+   dibiarkan kosong, kolom Komisi di mode latihan isinya strip semua dan orang
+   mengira fiturnya tidak jalan.
+
+   Urutannya memakai `dibuat` karena data latihan tidak punya waktu lunas;
+   di database yang dipakai waktu LUNAS. Perbedaan itu tidak apa-apa di sini,
+   yang ditiru bentuk hasilnya, bukan jamnya. */
+function kunciKomisiLatihan(){
+  const st = LATIH.pengaturan[0] || {};
+  const amb = Number(st.ambang_tier) || 0;
+  const atas = Number(st.komisi_atas_persen) || 0;
+  const bawah = Number(st.komisi_bawah_persen) || 0;
+  const bruto = st.komisi_dari === 'bruto';
+  const kum = {};                                   /* agen|bulan -> orang */
+  const urut = [...LATIH.pesanan].sort((a,b) => String(a.dibuat).localeCompare(String(b.dibuat)));
+  for (const o of urut){
+    /* Yang SUDAH dikunci dilewati — itu inti aturannya. Kalau dihitung ulang
+       tiap kali dipanggil, mode latihan akan memperagakan perilaku yang
+       justru kebalikan dari yang dibangun di database. */
+    if (o.komisi_nominal != null){
+      const k0 = o.agen_id + '|' + String(o.dibuat).slice(0,7);
+      kum[k0] = Math.max(kum[k0] || 0, o.komisi_tiket_kumulatif || 0);
+      continue;
+    }
+    if (!o.agen_id || !['paid','boarded'].includes(o.status)) continue;
+    const ag = (LATIH.agen || []).find(a => a.id === o.agen_id);
+    if (!ag || ag.internal) continue;
+    const k = o.agen_id + '|' + String(o.dibuat).slice(0,7);
+    kum[k] = (kum[k] || 0) + o.pax;
+    const tarif = amb && kum[k] >= amb ? atas : bawah;
+    const dasar = bruto ? o.subtotal : o.total;
+    o.komisi_persen = tarif;
+    o.komisi_dasar = dasar;
+    o.komisi_nominal = Math.round(dasar * tarif / 100);
+    o.komisi_tiket_kumulatif = kum[k];
+  }
+}
+kunciKomisiLatihan();
+
 /* Fungsi database (RPC) versi latihan. Yang membaca mengembalikan angka yang
    konsisten dengan tabel di atas; yang menulis mengubah data di memori. */
 function rpcLatihan(nama, arg = {}){
@@ -1513,9 +1590,12 @@ function rpcLatihan(nama, arg = {}){
           && (!per || String(o.dibuat).slice(0,7) === per));
         const tiket = jumlah(mil, 'pax');
         const omzet = jumlah(mil, 'total');
+        /* Tarif = yang berlaku untuk pesanan BERIKUTNYA. Komisinya TIDAK
+           dihitung dari tarif ini — dijumlahkan dari yang sudah dikunci,
+           sama seperti papan_peringkat() di database. */
         const tarif = amb && tiket >= amb ? tAtas : tBawah;
         return { agen_id:a.id, nama:a.nama, tiket, omzet, tarif,
-                 komisi: Math.round(omzet * tarif / 100) };
+                 komisi: jumlah(mil, 'komisi_nominal') };
       }).sort((x,y) => y.omzet - x.omzet);
     },
 
@@ -1668,6 +1748,12 @@ function rpcLatihan(nama, arg = {}){
       o.fu_status = arg.p_status === 'paid' ? 'jadi'
                   : arg.p_status.startsWith('cancel') ? 'tidak' : o.fu_status;
       o.diubah = new Date().toISOString();
+      /* Meniru trg_lepas_komisi lalu trg_kunci_komisi di database. */
+      if (['cancel_pembeli','cancel_cuaca','expired'].includes(o.status)){
+        o.komisi_persen = o.komisi_nominal = o.komisi_dasar = null;
+        o.komisi_tiket_kumulatif = null;
+      }
+      kunciKomisiLatihan();
       return null;
     },
 
@@ -1764,6 +1850,7 @@ function rpcLatihan(nama, arg = {}){
       if (r2.r_sisa === 0 && ['pending','waiting'].includes(o.status)) o.status = 'paid';
       else if (r2.r_sisa > 0 && o.status === 'pending')                o.status = 'waiting';
       o.diubah = new Date().toISOString();
+      kunciKomisiLatihan();                 /* meniru trg_kunci_komisi */
       return [{ r_dibayar:r2.r_dibayar, r_sisa:r2.r_sisa, r_keadaan:r2.r_keadaan }];
     },
 
@@ -2784,7 +2871,13 @@ async function tabRingkas(){
           <br><br>
           Jadi kalau angka komisi di sini tiba-tiba naik banyak padahal penjualannya
           cuma nambah sedikit, kemungkinan besar ada agen yang baru saja tembus
-          ${amb} tiket. Itu normal, bukan salah hitung.</div>`
+          ${amb} tiket. Itu normal, bukan salah hitung.
+          <br><br>
+          <b>Yang dihitung jumlah ORANG sebulan, bukan jumlah pesanan.</b>
+          ${amb} pesanan @1 orang dan <b>1 pesanan rombongan ${amb} orang</b> sama-sama
+          dihitung ${amb} tiket &mdash; jadi satu biro bisa langsung dapat tarif ${ats}%
+          di pesanan pertamanya. Yang dihitung cuma pesanan yang <b>sudah lunas</b>;
+          yang masih belum bayar belum menambah hitungan.</div>`
         : ''}
       </div>
       <div class="card"><h3>Penjualan per Produk
@@ -2833,6 +2926,10 @@ async function tabPesanan(){
     .select('kode,tipe,pax,anak,total,status,dibuat,tanggal_berangkat,kode_voucher_beku,'
            + 'pemesan_nama,pemesan_hp,pemesan_hp2,pemesan_alamat,biro_id,biro_nama,'
            + 'deposit_jam,deposit_sebab,harga_satuan_beku,dp_target,'
+           /* Komisi DIKUNCI di baris pesanan sejak 11 Nov 2026. Dibaca, tidak
+              dihitung ulang di sini — kalau dihitung ulang, layar bisa
+              menampilkan angka yang berbeda dari yang benar-benar tersimpan. */
+           + 'komisi_persen,komisi_nominal,komisi_tiket_kumulatif,'
            + 'produk(nama),agen(nama),kapal(nama)');
   if (bts) q = q.gte('dibuat', bts.mulai).lt('dibuat', bts.sampai);
   const [{ data, error }, { data: prd }] = await Promise.all([
@@ -2865,7 +2962,10 @@ async function tabPesanan(){
         <thead><tr><th class="nw">Kode</th><th class="nw">Dipesan</th><th class="nw">Berangkat</th>
             <th>Pembeli</th><th class="nw">WhatsApp</th><th class="nw">Produk</th>
             <th class="num">Orang</th><th class="nw">Agen</th>
-            <th class="nw">Status</th><th class="num">Total</th></tr></thead><tbody>
+            <th class="nw">Status</th><th class="num">Total</th>${
+            /* Admin tidak melihat komisi — sama dengan kolom Nilai di layar
+               Keberangkatan, dan sama dengan penjagaan di database. */
+            S.peran==='admin' ? '' : '<th class="num">Komisi agen</th>'}</tr></thead><tbody>
         ${data.map(o=>{
           const st = STATUS[o.status]||[o.status,'p-mute'];
           return `<tr>
@@ -2889,7 +2989,12 @@ async function tabPesanan(){
               :'<span class="pill p-mute">LANGSUNG</span>'}</td>
             <td class="nw"><span class="sel2" style="flex-wrap:wrap"><span class="pill ${st[1]}">${st[0]}</span>${
               aksiStatus(o)}</span></td>
-            <td class="num nw" data-urut="${o.total}">${rp(o.total)}${selBayar(o, bayarPeta[o.kode])}</td></tr>`;
+            <td class="num nw" data-urut="${o.total}">${rp(o.total)}${selBayar(o, bayarPeta[o.kode])}</td>${
+            S.peran==='admin' ? '' : `<td class="num nw" data-urut="${o.komisi_nominal||0}">${
+              o.komisi_nominal == null
+                ? `<span style="color:var(--muted)">&mdash;</span>`
+                : `${rp(o.komisi_nominal)}<div class="hint">${
+                     Number(o.komisi_persen)}% &middot; tiket ke-${o.komisi_tiket_kumulatif}</div>`}</td>`}</tr>`;
         }).join('')}
       </tbody></table>
     </div>`;
@@ -2897,7 +3002,11 @@ async function tabPesanan(){
   lengkapiTabel('#isi table[data-papan="pesanan"]', {
     id: 'pesanan',
     petunjuk: 'Cari kode, pembeli, produk, agen…',
-    takUrut: [9],
+    /* Kolom 9 = Total (ada tombol Catat bayar di dalamnya), kolom 10 = Komisi.
+       Keduanya tidak diurut lewat teks: isinya bercampur tombol dan keterangan.
+       Kolom 10 cuma ada kalau bukan Admin, dan menyebutnya walau tidak ada
+       tidak apa-apa — lengkapiTabel() melewati indeks yang kosong. */
+    takUrut: [9, 10],
     saring: [
       { kolom: 8, semua: 'Semua status',
         pilihan: [...new Set((data||[]).map(o => (STATUS[o.status]||[o.status])[0]))] },
@@ -5221,6 +5330,12 @@ async function tabBerangkat(){
   const { data, error } = await DB.rpc('keberangkatan', { p_dari: null, p_sampai: null });
   if (error) return gagal(error);
   const baris = data || [];
+  /* SATU BARIS = satu tanggal DIKALI satu pelayaran, bukan satu tanggal.
+     15 Nov yang punya 1 Day Journey dan Cruise Daily jadi DUA baris. KPI
+     sebelumnya memakai baris.length dan menyebutnya "Tanggal berangkat" —
+     angkanya selalu lebih besar dari jumlah hari sebenarnya, dan tidak ada
+     yang sadar karena kelihatan masuk akal. Ditemukan Mas Dik 11 Nov 2026. */
+  const jmlHari = new Set(baris.map(b => b.tanggal)).size;
   const tot = baris.reduce((a,b)=>({
     pes: a.pes + b.jml_pesanan, pax: a.pax + b.jml_pax,
     anak: a.anak + b.jml_anak, omzet: a.omzet + Number(b.omzet),
@@ -5229,8 +5344,8 @@ async function tabBerangkat(){
 
   $('isi').innerHTML = `
     <div class="grid g4">
-      <div class="kpi"><div class="k">Tanggal berangkat</div><div class="v">${baris.length}</div>
-        <div class="d">yang punya pesanan</div></div>
+      <div class="kpi"><div class="k">Hari keberangkatan</div><div class="v">${jmlHari}</div>
+        <div class="d">hari yang sudah ada pesanannya</div></div>
       <div class="kpi"><div class="k">Total penumpang</div><div class="v">${tot.pax}</div>
         <div class="d">${tot.pes} pesanan${tot.anak?` · ${tot.anak} anak`:''}</div></div>
       <div class="kpi"><div class="k">Belum dapat kapal</div>
@@ -5241,6 +5356,9 @@ async function tabBerangkat(){
     </div>
     <div class="card scrollx">
       <h3>Tiket Terjual per Tanggal Keberangkatan</h3>
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:9px">Satu baris
+        = satu tanggal untuk satu pelayaran. Tanggal yang punya dua pelayaran
+        muncul dua baris.</div>
       <table data-papan="berangkat">
         <thead><tr><th class="nw">Tanggal</th><th class="nw">Pelayaran</th>
           <th class="num">Pesanan</th><th class="num">Orang</th><th class="num">Anak</th>
@@ -5258,6 +5376,15 @@ async function tabBerangkat(){
         </tr>`).join('') : `<tr><td colspan="7"><div class="hint">
           Belum ada pesanan yang punya tanggal keberangkatan.</div></td></tr>`}</tbody>
       </table>
+      <div class="note"><b>Layar ini untuk melihat beban ke depan</b>
+        Dipakai buat menyiapkan kapal dan orang: tanggal mana yang sudah ramai,
+        berapa orang yang akan berangkat, dan mana yang penumpangnya belum
+        ditempatkan ke kapal. Tidak ada tombol di sini &mdash; pembagian kapalnya
+        dikerjakan di <b>Pembagian kapal</b>, daftar yang berangkat hari ini ada
+        di <b>Daftar</b>, dan daftar nama untuk syahbandar di <b>Manifest</b>.
+        <br><br>
+        Angka di kolom <b>Belum berkapal</b> yang masih kuning berarti pesanan itu
+        belum tahu naik kapal yang mana. Pastikan sudah nol sebelum hari H.</div>
       <div class="note"><b>Pesanan lama tidak punya tanggal</b>
         Tanggal keberangkatan baru dikumpulkan sejak fitur ini dipasang. Pesanan
         sebelum itu tidak muncul di sini — bukan hilang, memang tanggalnya tidak
@@ -6447,11 +6574,15 @@ async function tabAtur(){
     <div class="note">Semua angka di sini bisa diubah tanpa ngoding. Harga belum fix — makanya semuanya jadi parameter.</div>
     <!-- BAHASA KARTU INI DIGANTI 10 Nov 2026.
          Label lamanya jargon ("Ambang tier", "Reset tier"), dan dua di
-         antaranya MENYESATKAN: "Komisi di bawah ambang / di atas ambang"
-         terbaca seperti tarif bertingkat — 20 tiket pertama 5%, sisanya 10%.
-         Kenyataannya retroaktif: begitu tembus, SEMUA tiket periode itu
-         kena tarif atas. papan_peringkat() memilih SATU tarif lalu
-         mengalikannya ke seluruh omzet, bukan memecah per tiket.
+         antaranya MENYESATKAN.
+
+         DIPERBARUI 11 Nov 2026 — aturannya BERUBAH, catatan lama di sini
+         sudah tidak berlaku. Dulu komisi dihitung dari omzet sebulan dikali
+         SATU tarif, dan tarif baru ikut mundur ke semua tiket bulan itu.
+         Sekarang tarif ditentukan SAAT TIAP PESANAN LUNAS lalu DIKUNCI di
+         baris pesanan (kolom komisi_persen / komisi_nominal). Pesanan yang
+         terlanjur tarif bawah TETAP tarif bawah. Jadi "20 tiket pertama 5%,
+         sisanya 10%" yang dulu salah, sekarang justru BENAR.
          Salah baca di sini langsung jadi salah bayar komisi. -->
     <div class="card"><h3>Diskon &amp; Komisi</h3>
       ${(() => {
@@ -6508,20 +6639,27 @@ async function tabAtur(){
           Urutan hitungnya: harga dasar &times; jumlah orang &rarr; dikurangi
           diskon ${disk}% &rarr; ditambah add-on.
           <br><br>
-          <b>Komisi agen &mdash; contoh dengan angka yang terpasang sekarang</b><br>
-          Anggap tiap tiket ${rp(harga)}, komisi dihitung dari
-          <b>${bruto ? 'harga sebelum diskon' : `harga sesudah diskon ${disk}%`}</b>.
+          <b>Komisi agen &mdash; dihitung per pesanan, lalu dikunci</b><br>
+          Tiap pesanan dapat tarifnya sendiri <b>saat pesanan itu lunas</b>,
+          dan angka itu tidak berubah lagi sesudahnya.
           <br>
-          Agen menjual <b>${amb - 1} tiket</b> bulan ini &rarr; tarifnya
-          <b>${bwh}%</b> dari ${rp(sblm.dasar)} = <b>${rp(sblm.nilai)}</b>.<br>
-          Menjual <b>${amb} tiket</b> &rarr; tarifnya naik jadi <b>${ats}%</b>
-          dari ${rp(ssdh.dasar)} = <b>${rp(ssdh.nilai)}</b>.
+          Dasarnya: <b>${bruto ? 'harga tiket saja, sebelum diskon'
+            : `total pesanan &mdash; sesudah diskon ${disk}% dan sudah termasuk add-on`}</b>.
           <br><br>
-          Satu tiket tambahan menaikkan komisinya
-          <b>${rp(ssdh.nilai - sblm.nilai)}</b>, karena tarif baru itu berlaku
-          untuk <b>SELURUH ${amb} tiket</b> &mdash; bukan hanya tiket ke-${amb}.
-          Karena ikut mundur ke tiket lama begini, <b>mengubah tarif di tengah
-          bulan ikut mengubah komisi yang sudah berjalan.</b></div>`;
+          Anggap satu agen bulan ini dapat tiga pesanan, ambangnya ${amb} orang:
+          <br>
+          Pesanan 1 &mdash; 8 orang, kumulatif 8 &rarr; tarif <b>${bwh}%</b><br>
+          Pesanan 2 &mdash; 9 orang, kumulatif 17 &rarr; tarif <b>${bwh}%</b><br>
+          Pesanan 3 &mdash; 5 orang, kumulatif 22 &rarr; <b>tembus ${amb}</b>,
+          tarifnya <b>${ats}%</b>
+          <br><br>
+          Pesanan 1 dan 2 <b>tetap ${bwh}%</b> &mdash; tidak ikut naik.
+          Pesanan 3 dapat ${ats}% untuk seluruh pesanan itu, tidak dipecah.
+          <br><br>
+          Karena sudah terkunci, <b>mengubah tarif di sini tidak menyentuh
+          komisi pesanan yang sudah lunas</b> &mdash; hanya berlaku untuk
+          pesanan yang lunas sesudah ini. Hitungan orang kembali nol tiap awal
+          bulan.</div>`;
       })()}
       <div class="grid g3" style="margin-bottom:0">
       ${(() => {
@@ -6567,17 +6705,25 @@ async function tabAtur(){
                  + `SELURUH ${amb} tiket, bukan hanya yang ke-${amb}.`
                : 'Begitu tembus, tarif ini berlaku untuk SELURUH tiket periode itu.')}`;
       })()}
-      ${pil('komisi_dari','Komisi dihitung dari harga',
-        [['bruto','Harga sebelum diskon'],['neto','Harga sesudah diskon']],
+      ${pil('komisi_dari','Komisi dihitung dari',
+        [['bruto','Harga tiket saja (tanpa add-on)'],
+         ['neto','Total pesanan (termasuk add-on)']],
         /* Petunjuknya MENGIKUTI pilihan yang sedang aktif. Versi sebelumnya
            selalu berbunyi "sementara memakai harga sebelum diskon" — tetap
            begitu walau pilihannya sudah neto, jadi layar menyatakan hal yang
            berlawanan dengan isinya sendiri. */
+        /* Pilihan ini mengubah DUA hal sekaligus, dan dulu cuma menyebut satu.
+           'neto' = total pesanan, yang sudah dikurangi diskon DAN sudah
+           ditambah add-on. Jadi menggesernya bukan cuma soal diskon:
+           add-on ikut/tidak ikut dikomisikan juga ditentukan di sini. */
         data.komisi_dari === 'neto'
-          ? `Memakai harga <b>sesudah</b> diskon ${Number(data.diskon_persen)||0}% `
-            + `&mdash; komisi agen ikut turun bersama diskon.`
-          : `Memakai harga <b>sebelum</b> diskon &mdash; komisi agen tidak ikut `
-            + `turun walau pembeli dapat potongan. Belum diputuskan bersama Pak Dika.`)}
+          ? `Memakai <b>total pesanan</b>: sesudah diskon `
+            + `${Number(data.diskon_persen)||0}% dan <b>sudah termasuk add-on</b>. `
+            + `Jadi agen ikut dapat komisi dari drone dan sewa alat, tapi komisinya `
+            + `juga ikut turun bersama diskon pembeli.`
+          : `Memakai <b>harga tiket saja</b>, sebelum diskon. Add-on `
+            + `<b>tidak</b> dikomisikan &mdash; agen yang berhasil menjual drone `
+            + `tidak dapat apa-apa dari situ.`)}
       ${pil('periode_reset','Hitungan tiket mulai nol lagi',
         [['bulanan','Tiap bulan'],['per_event','Tiap event'],['all_time','Tidak pernah — dihitung sejak awal']],
         'Menentukan kapan hitungan tiket agen kembali ke nol.')}
@@ -6800,7 +6946,8 @@ async function tabKomisi(){
   const [{data:lb}, {data:semuaPesanan, error}, {data:prd}, {data:ta}] = await Promise.all([
     DB.rpc('papan_peringkat',{p_periode:per}),
     DB.from('pesanan')
-      .select('kode,pax,total,status,dibuat,agen_id,pemesan_nama,pemesan_hp,produk(nama)')
+      .select('kode,pax,total,status,dibuat,agen_id,pemesan_nama,pemesan_hp,'
+            + 'komisi_persen,komisi_nominal,komisi_tiket_kumulatif,produk(nama)')
       .order('dibuat',{ascending:false}),
     DB.rpc('periode_pesanan'),
     /* Ambang & tarif dibaca dari database, TIDAK ditulis tangan lagi.
@@ -6876,7 +7023,8 @@ async function tabKomisi(){
     <div class="card scrollx"><h3>Pelanggan Saya <span class="pill p-mute">${pesananku.length}</span></h3>
       <table data-papan="pelangganku">
         <thead><tr><th class="nw">Kode</th><th class="nw">Tgl</th><th>Pembeli</th><th class="nw">WhatsApp</th>
-            <th class="nw">Produk</th><th class="num">Orang</th><th class="num">Total</th><th class="nw">Status</th></tr></thead>
+            <th class="nw">Produk</th><th class="num">Orang</th><th class="num">Total</th>
+            <th class="num">Komisi</th><th class="nw">Status</th></tr></thead>
         <tbody>${pesananku.map(o=>{
           const st=STATUS[o.status]||[o.status,'p-mute'];
           return `<tr><td class="mono nw">${esc(o.kode)}</td>
@@ -6885,6 +7033,9 @@ async function tabKomisi(){
             <td class="nw">${selWa(o.pemesan_hp, `Halo ${o.pemesan_nama}, ini dari The Tamperan Cruise soal pesanan ${o.kode}.`)}</td>
             <td class="nw">${esc(o.produk?.nama)}</td><td class="num">${o.pax}</td>
             <td class="num nw">${rp(o.total)}</td>
+            <td class="num nw">${o.komisi_nominal == null
+              ? `<span style="color:var(--muted)">&mdash;</span>`
+              : `${rp(o.komisi_nominal)}<div class="hint">${Number(o.komisi_persen)}%</div>`}</td>
             <td class="nw"><span class="pill ${st[1]}">${st[0]}</span></td></tr>`;
         }).join('')}</tbody>
       </table>

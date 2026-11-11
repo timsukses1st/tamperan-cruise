@@ -795,6 +795,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-11h', 'Sisa kolom NIK dibersihkan dari Manifest; setelan mati "Hitungan tiket mulai nol lagi" dihapus'],
   ['2026-11-11g', 'Manifest & Per tanggal dilebur jadi satu layar bertingkat: klik tanggalnya untuk melihat daftar orangnya'],
   ['2026-11-11f', 'PERBAIKAN: dashboard tidak bisa login (pengunci komisi latihan dipanggil sebelum waktunya)'],
   ['2026-11-11e', 'Komisi dikunci per pesanan; add-on ikut dikomisikan; kolom Komisi di tab Pesanan & Komisi'],
@@ -4436,8 +4437,15 @@ async function tabFollowUp(){
    tidak ada, dan itu harus terbaca di layarnya sendiri, bukan baru
    ketahuan di dermaga.
 
-   Kolom NIK & alamat di sini milik PEMESAN, bukan penumpang. Penyamaran
-   NIK tetap memakai pengaturan nik_siapa_boleh_lihat yang sudah ada.
+   Kolom alamat di sini milik PEMESAN, bukan penumpang.
+
+   NIK DIHAPUS DARI LAYAR INI 11 Nov 2026. NIK tidak dikumpulkan lagi sejak
+   27 Okt 2026 — halaman pemesanan tidak punya kolomnya. Yang tertinggal di
+   sini bukan sekadar kolom kosong: ada seluruh mesin penyamaran NIK
+   (samarNik, bolehNik, setelan nik_siapa_boleh_lihat) yang siap jalan.
+   Kalau setelan kolom_manifest.nik dinyalakan orang, yang muncul garis
+   semua — dan layarnya tampak seperti kehilangan data, padahal datanya
+   memang tidak pernah ada. Alamat TETAP, karena itu masih diisi pemesan.
    ==================================================================== */
 async function tabManifest(){
   /* Belum memilih tanggal -> tampilkan ringkasannya dulu. */
@@ -4445,18 +4453,13 @@ async function tabManifest(){
 
   const [{data:ord, error:e1}, {data:atur}] = await Promise.all([
     DB.from('pesanan').select('kode,tipe,pax,anak,jml_naik,status,tanggal_berangkat,'
-      + 'pemesan_nama,pemesan_hp,pemesan_nik,pemesan_alamat,biro_nama,biro_pic,'
+      + 'pemesan_nama,pemesan_hp,pemesan_alamat,biro_nama,biro_pic,'
       + 'produk(nama),kapal(nama)')
       .in('status',['paid','boarded']).order('tanggal_berangkat'),
-    DB.from('pengaturan').select('kolom_manifest,nik_siapa_boleh_lihat').single()
+    DB.from('pengaturan').select('kolom_manifest').single()
   ]);
   if (e1) return gagal(e1);
   const kol = atur?.kolom_manifest || {};
-  const bolehNik = atur?.nik_siapa_boleh_lihat === 'super_owner'
-    ? ['super','owner'].includes(S.peran) : S.peran==='super';
-  const samarNik = n => !n ? '<span style="color:var(--muted)">—</span>'
-    : bolehNik ? `<span class="mono" style="font-size:11.5px">${esc(n)}</span>`
-    : `<span class="mono" style="font-size:11.5px">${esc(n.slice(0,4))} •••• •••• ${esc(n.slice(-4))}</span>`;
 
   /* Disaring di sini, bukan di query: ord dipakai juga untuk menghitung
      berapa tanggal lain yang masih menunggu, dan query kedua cuma untuk itu
@@ -4493,7 +4496,6 @@ async function tabManifest(){
         <thead><tr><th class="nw">Berangkat</th><th class="nw">Kapal</th><th class="nw">Kode</th>
           <th>Pemesan</th><th class="nw">WhatsApp</th><th class="nw">Produk</th>
           <th class="num">Orang</th><th class="num">Anak</th><th class="num">Naik</th>
-          ${kol.nik ? '<th class="nw">NIK pemesan</th>' : ''}
           ${kol.alamat ? '<th>Alamat sesuai KTP</th>' : ''}
           <th class="nw">Status</th></tr></thead>
         <tbody>${baris.length ? baris.map(o => {
@@ -4523,7 +4525,6 @@ async function tabManifest(){
               (o.jml_naik || 0) >= o.pax ? 'p-ok' : (o.jml_naik ? 'p-warn' : 'p-mute')
               }">${o.jml_naik || 0}/${o.pax}</span>${
               kurang > 0 && o.jml_naik ? `<div class="hint">${kurang} tidak naik</div>` : ''}</td>
-            ${kol.nik ? `<td class="nw">${samarNik(o.pemesan_nik)}</td>` : ''}
             ${kol.alamat ? `<td><span class="nama" style="max-width:280px"
               title="${esc(o.pemesan_alamat || '')}">${
               o.pemesan_alamat ? esc(o.pemesan_alamat) : '<span style="color:var(--muted)">—</span>'
@@ -4548,19 +4549,9 @@ async function tabManifest(){
       ${belumKapal ? `<div class="note w"><b>${belumKapal} rombongan belum dapat kapal</b>
         Tempatkan dulu di tab Pembagian Kapal sebelum hari keberangkatan.</div>` : ''}
 
-      ${/* Dibiarkan .note biasa (terlipat), BUKAN .note w. Sempat kuubah jadi .w,
-            lalu kubatalkan: amber berarti "ada yang perlu diperhatikan", dan NIK
-            yang disamarkan itu justru sistem bekerja sebagaimana mestinya. Amber
-            pada hal yang normal membuat orang berhenti memperhatikan amber —
-            termasuk pada peringatan "belum dapat kapal" tepat di atasnya.
-
-            Terlipat sudah cukup karena JUDULNYA sendiri sudah menjawab
-            pertanyaannya ("kenapa kolom NIK isinya bintang-bintang"); isi yang
-            dilipat cuma menambahkan siapa yang boleh melihat dan di mana
-            mengubahnya. */''}
-      ${!bolehNik && kol.nik ? `<div class="note"><b>NIK disamarkan untuk peran ini</b>
-        Hanya ${atur.nik_siapa_boleh_lihat === 'super_owner' ? 'Super Admin & Owner' : 'Super Admin'}
-        yang melihat NIK penuh. Pengaturannya ada di tab Pengaturan.</div>` : ''}
+      ${/* Catatan "NIK disamarkan untuk peran ini" DIHAPUS 11 Nov 2026 bersama
+            kolomnya. Menjelaskan penyamaran kolom yang tidak ada lagi cuma
+            membuat orang mengira data NIK tersimpan di suatu tempat. */''}
     </div>`;
 
   $('mf-kembali').onclick = () => { S.mfTgl = null; tabManifest(); };
@@ -6779,9 +6770,23 @@ async function tabAtur(){
           : `Memakai <b>harga tiket saja</b>, sebelum diskon. Add-on `
             + `<b>tidak</b> dikomisikan &mdash; agen yang berhasil menjual drone `
             + `tidak dapat apa-apa dari situ.`)}
-      ${pil('periode_reset','Hitungan tiket mulai nol lagi',
-        [['bulanan','Tiap bulan'],['per_event','Tiap event'],['all_time','Tidak pernah — dihitung sejak awal']],
-        'Menentukan kapan hitungan tiket agen kembali ke nol.')}
+      ${/* DIHAPUS 11 Nov 2026 — "Hitungan tiket mulai nol lagi" (periode_reset).
+            Setelan mati ketujuh, dan jenis yang paling mahal: ia menjanjikan
+            kendali atas UANG KOMISI. Diperiksa di seluruh fungsi database:
+            satu-satunya yang menyentuh kolom ini cuma trigger pencatat
+            perubahan. Tidak ada fungsi yang membacanya untuk memutuskan apa
+            pun — reset bulanan dipaku di kode (to_char ... 'YYYY-MM' dengan
+            zona Asia/Jakarta). Jadi memilih "Tiap event" atau "Tidak pernah"
+            tidak mengubah apa-apa, dan layarnya tidak memberi tahu.
+
+            Pak Dika sudah memastikan 11 Nov 2026 bahwa reset memang BULANAN,
+            jadi perilakunya sudah benar; yang dihapus cuma saklar palsunya.
+            Kolom periode_reset dibiarkan di database (nilainya 'bulanan',
+            cocok dengan perilaku nyata).
+
+            Kalau suatu saat mau dihidupkan lagi: yang harus dibangun DULU
+            adalah pembacanya di papan_peringkat() dan kunci_komisi(), baru
+            kolomnya ditampilkan. */''}
     </div></div>
     <div class="card"><h3>Jalur pemesanan</h3>
       <div class="note"><b>Dua jalur bisa hidup bersamaan.</b>
@@ -6957,7 +6962,7 @@ async function tabAtur(){
     ['diskon_persen','ambang_tier','komisi_bawah_persen','komisi_atas_persen'].forEach(k=>{
       const v=$('set_'+k).value.trim(); isi[k]= v===''?null:Number(v);
     });
-    ['komisi_dari','periode_reset']
+    ['komisi_dari']
       .forEach(k=> isi[k]=$('set_'+k).value);
     /* Kolom boolean dikirim sebagai boolean, bukan teks. value selalu String,
        dan 'false' itu nilai yang truthy — menyimpannya apa adanya akan

@@ -6537,11 +6537,21 @@ async function tabAtur(){
            database — tidak perlu migration, nilai lamanya tetap tersimpan,
            dan kalau suatu saat pencentangan per nama dihidupkan lagi
            tinggal kolom ini dimunculkan kembali di sini. -->
-      ${f('kuota_kursi','Kuota kursi per keberangkatan','Dikosongkan = tanpa batas')}
-      <!-- "⬜" diganti teks biasa: di layar bentuknya persis kotak centang
-           kosong, jadi terbaca seperti kendali yang bisa diklik padahal cuma
-           penanda. Sudah bikin bingung sekali; tidak perlu dua kali. -->
-      ${f('kapasitas_izin','Kapasitas izin kapal','Belum diketahui — tanya syahbandar')}
+      <!-- "Kuota kursi per keberangkatan" dan "Kapasitas izin kapal" DIHAPUS
+           dari layar 10 Nov 2026. Keduanya tidak mengubah apa pun: diperiksa
+           di dua sisi — tidak ada fungsi database yang memakainya (selain
+           trigger audit), dan di dashboard nilainya hanya dibaca untuk
+           ditampilkan lalu disimpan kembali.
+
+           "Kapasitas izin kapal" paling menyesatkan: namanya SAMA PERSIS
+           dengan kolom kapasitas di Armada Kapal — dan yang di sana memang
+           bekerja (kartu muatan berubah dan menulis "MELEBIHI" waktu muatan
+           lewat kapasitas). Dua tempat, nama sama, yang satu hidup satu mati.
+           Orang yang mengisi yang di sini akan mengira kapasitas sudah diatur.
+
+           Kuota kursi per keberangkatan BELUM PERNAH DIBANGUN sebagai fitur —
+           tidak ada yang membatasi jumlah kursi per tanggal. Kolom databasenya
+           dibiarkan supaya tinggal dimunculkan lagi kalau fiturnya dibuat. -->
       ${f('tahan_pending_jam','Order pending ditahan (jam)')}
     </div></div>
     <!-- DUA SETELAN NIK DIHAPUS DARI LAYAR 10 Nov 2026.
@@ -6663,7 +6673,7 @@ async function tabAtur(){
        mengembalikan null dan .value melempar TypeError — yang hilang bukan
        satu kolom, tapi SELURUH tombol Simpan Pengaturan. */
     ['diskon_persen','ambang_tier','komisi_bawah_persen','komisi_atas_persen',
-     'kuota_kursi','kapasitas_izin','tahan_pending_jam'].forEach(k=>{
+     'tahan_pending_jam'].forEach(k=>{
       const v=$('set_'+k).value.trim(); isi[k]= v===''?null:Number(v);
     });
     ['komisi_dari','periode_reset','lb_agen_mode']

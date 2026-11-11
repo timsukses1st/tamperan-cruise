@@ -4130,14 +4130,30 @@ async function tabFollowUp(){
     ? (semua||[]).filter(o => S.agenId && o.agen_id === S.agenId)
     : (semua||[]);
 
+  /* Kelompok "Kedaluwarsa" DIHAPUS 11 Nov 2026.
+     Keterangannya dulu berbunyi "Lewat batas tahan order. Kursinya sudah
+     dilepas" — tiga hal yang tidak satu pun ada di sistem ini: tidak ada
+     penjadwal yang mengubah status (pg_cron tidak terpasang), tidak ada
+     tombol yang mengirim status expired, dan tidak ada stok kursi yang bisa
+     ditahan atau dilepas. Di database: 0 pesanan berstatus expired, dan
+     satu-satunya status yang pernah ada hanya 'pending'. Kelompok itu hanya
+     pernah terisi oleh data palsu mode panduan.
+
+     Kelompok kosong permanen membuat orang mengira ada yang rusak — atau
+     lebih buruk, mengira kursi memang dilepas otomatis padahal tidak.
+
+     Status 'expired' TETAP ikut diambil dan digabungkan ke "Belum bayar":
+     memang itulah keadaannya, dan kalau suatu saat ada baris lama berstatus
+     itu, ia tetap kelihatan. Tidak ada pesanan yang bisa hilang dari layar
+     gara-gara kelompoknya dihapus. */
   const grup = [
     ['pending',        'Belum bayar',        'Order dibuat tapi belum ada pembayaran. Paling berharga — niatnya sudah ada.'],
-    ['expired',        'Kedaluwarsa',        'Lewat batas tahan order. Kursinya sudah dilepas, tapi orangnya masih bisa ditawari lagi.'],
     ['cancel_pembeli', 'Batal oleh pembeli', 'Dibatalkan sendiri. Tanya alasannya — ini umpan balik yang paling jujur.']
   ];
+  const STATUS_GRUP = { pending: ['pending','expired'], cancel_pembeli: ['cancel_pembeli'] };
 
   $('isi').innerHTML = kartuPeriode(prd, S.periode, 'fu-periode') + grup.map(([st,judul,ket]) => {
-    const arr = (data||[]).filter(o=>o.status===st);
+    const arr = (data||[]).filter(o => (STATUS_GRUP[st] || [st]).includes(o.status));
     if (!arr.length) return `<div class="fugrp"><h3>${judul}
       <span class="pill p-mute">0</span></h3><div class="hint">Tidak ada${
       S.periode ? ' di ' + esc(namaPeriode(S.periode)) : ''}. Bagus.</div></div>`;
@@ -6520,40 +6536,27 @@ async function tabAtur(){
         [['false','Mati — kode agen wajib'],['true','Hidup — kode jadi opsional']],
         'Halaman pemesanan langsung ikut berubah begitu disimpan, tanpa deploy ulang.')}
     </div></div>
-    <div class="card"><h3>Boarding &amp; Kapal</h3><div class="grid g3" style="margin-bottom:0">
-      <!-- "Ambang cek per nama" DIHAPUS dari layar 10 Nov 2026.
-           Setelan itu sudah tidak mengubah apa pun sejak 27 Okt, waktu QR dan
-           pencentangan per nama dibatalkan: boarding sekarang mengisi satu
-           ANGKA per rombongan. Diperiksa di dua sisi sebelum dihapus —
-           di dashboard nilainya cuma dibaca untuk ditampilkan lalu disimpan
-           kembali, dan di database tidak ada satu pun fungsi yang memakainya
-           selain trigger audit.
+    <!-- KARTU "Boarding & Kapal" DIHAPUS SELURUHNYA 11 Nov 2026.
 
-           Setelan yang tidak mengubah apa pun LEBIH BERBAHAYA daripada tidak
-           ada: orang mengira sudah mengatur sesuatu, lalu heran kenapa
-           perilakunya tidak berubah.
+         Keempat setelannya ternyata tidak satu pun mengubah perilaku sistem,
+         dan dihapus bertahap setelah masing-masing diperiksa di dua sisi
+         (fungsi database + pemakaian di dashboard):
 
-           Kolom pengaturan.ambang_cek_boarding SENGAJA TIDAK dihapus dari
-           database — tidak perlu migration, nilai lamanya tetap tersimpan,
-           dan kalau suatu saat pencentangan per nama dihidupkan lagi
-           tinggal kolom ini dimunculkan kembali di sini. -->
-      <!-- "Kuota kursi per keberangkatan" dan "Kapasitas izin kapal" DIHAPUS
-           dari layar 10 Nov 2026. Keduanya tidak mengubah apa pun: diperiksa
-           di dua sisi — tidak ada fungsi database yang memakainya (selain
-           trigger audit), dan di dashboard nilainya hanya dibaca untuk
-           ditampilkan lalu disimpan kembali.
+           Ambang cek per nama   — pencentangan per nama dibatalkan 27 Okt
+           Kuota kursi           — tidak ada stok kursi yang dibatasi
+           Kapasitas izin kapal  — nama ganda; yang bekerja ada di Armada Kapal
+           Order pending ditahan — tidak ada penjadwal, tidak ada tombol, dan
+                                   tidak ada kursi yang bisa ditahan/dilepas.
+                                   Di database: 0 pesanan pernah kedaluwarsa.
 
-           "Kapasitas izin kapal" paling menyesatkan: namanya SAMA PERSIS
-           dengan kolom kapasitas di Armada Kapal — dan yang di sana memang
-           bekerja (kartu muatan berubah dan menulis "MELEBIHI" waktu muatan
-           lewat kapasitas). Dua tempat, nama sama, yang satu hidup satu mati.
-           Orang yang mengisi yang di sini akan mengira kapasitas sudah diatur.
+         Yang terakhir paling perlu diingat: ia MENJANJIKAN PERLINDUNGAN YANG
+         TIDAK ADA. Orang yang membacanya mengira kursi otomatis dilepas
+         setelah 2 jam, lalu membiarkan pesanan menggantung menumpuk.
 
-           Kuota kursi per keberangkatan BELUM PERNAH DIBANGUN sebagai fitur —
-           tidak ada yang membatasi jumlah kursi per tanggal. Kolom databasenya
-           dibiarkan supaya tinggal dimunculkan lagi kalau fiturnya dibuat. -->
-      ${f('tahan_pending_jam','Order pending ditahan (jam)')}
-    </div></div>
+         Semua kolom databasenya dibiarkan utuh — tidak perlu migration, dan
+         tinggal dimunculkan lagi kalau fiturnya benar-benar dibangun.
+         KALAU "Order pending ditahan" dihidupkan lagi, penjadwalnya (pg_cron,
+         tersedia v1.6.4) harus dibangun DULU sebelum kolomnya ditampilkan. -->
     <!-- DUA SETELAN NIK DIHAPUS DARI LAYAR 10 Nov 2026.
          NIK sudah tidak dikumpulkan sejak 27 Okt — halaman pemesanan tidak
          punya kolomnya sama sekali, dan di database 0 dari seluruh pesanan
@@ -6672,8 +6675,7 @@ async function tabAtur(){
        kolomnya dihapus dari layar. Kalau tertinggal di sini, $('set_…')
        mengembalikan null dan .value melempar TypeError — yang hilang bukan
        satu kolom, tapi SELURUH tombol Simpan Pengaturan. */
-    ['diskon_persen','ambang_tier','komisi_bawah_persen','komisi_atas_persen',
-     'tahan_pending_jam'].forEach(k=>{
+    ['diskon_persen','ambang_tier','komisi_bawah_persen','komisi_atas_persen'].forEach(k=>{
       const v=$('set_'+k).value.trim(); isi[k]= v===''?null:Number(v);
     });
     ['komisi_dari','periode_reset','lb_agen_mode']

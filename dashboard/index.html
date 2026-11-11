@@ -795,6 +795,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-11i', 'Keterangan komisi ikut berubah saat pilihannya diganti; kolom Komisi agen diberi penunjuk geser'],
   ['2026-11-11h', 'Sisa kolom NIK dibersihkan dari Manifest; setelan mati "Hitungan tiket mulai nol lagi" dihapus'],
   ['2026-11-11g', 'Manifest & Per tanggal dilebur jadi satu layar bertingkat: klik tanggalnya untuk melihat daftar orangnya'],
   ['2026-11-11f', 'PERBAIKAN: dashboard tidak bisa login (pengunci komisi latihan dipanggil sebelum waktunya)'],
@@ -1361,7 +1362,7 @@ function dataLatihan(){
         satuan:'unit', maks:null, aktif:true, urutan:2, ket:'Termasuk instruktur pendamping.' },
     ],
     pengaturan: [{ id:true, diskon_persen:'5.00', ambang_tier:20, komisi_bawah_persen:'5.00',
-      komisi_atas_persen:'10.00', retroaktif:true, periode_reset:'bulanan', komisi_dari:'bruto',
+      komisi_atas_persen:'10.00', retroaktif:true, periode_reset:'bulanan', komisi_dari:'neto',
       ambang_cek_boarding:10, lb_agen_mode:'penuh', retensi_nik_bulan:12,
       nik_siapa_boleh_lihat:'super', kuota_kursi:null, kapasitas_izin:null, tahan_pending_jam:2,
       /* Ikut didaftarkan supaya saklarnya punya nilai di mode latihan juga.
@@ -3024,6 +3025,14 @@ async function tabPesanan(){
                      Number(o.komisi_persen)}% &middot; tiket ke-${o.komisi_tiket_kumulatif}</div>`}</td>`}</tr>`;
         }).join('')}
       </tbody></table>
+      ${/* Tabel ini 11 kolom dan hampir selalu lebih lebar dari layar, jadi
+            dua kolom terakhir (Total dan Komisi agen) berada di luar pandangan
+            sampai tabelnya digeser. 11 Nov 2026 Mas Dik bertanya "mana kolom
+            komisi agen?" — kolomnya ADA, cuma tidak kelihatan. Fitur yang
+            tidak bisa ditemukan sama saja dengan fitur yang tidak ada. */''}
+      ${S.peran==='admin' ? '' : `<div class="hint" style="margin-top:7px">
+        &harr; Geser tabel ke kanan untuk melihat kolom <b>Total</b> dan
+        <b>Komisi agen</b>.</div>`}
     </div>`;
   pasangAksiStatus(tabPesanan);
   lengkapiTabel('#isi table[data-papan="pesanan"]', {
@@ -6751,6 +6760,16 @@ async function tabAtur(){
                  + `SELURUH ${amb} tiket, bukan hanya yang ke-${amb}.`
                : 'Begitu tembus, tarif ini berlaku untuk SELURUH tiket periode itu.')}`;
       })()}
+      ${/* Keterangan di bawah pilihan ini IKUT BERUBAH seketika saat
+            pilihannya diganti — lihat pasangKomisiDari() di bawah. Sebelum
+            11 Nov 2026 keterangannya hanya digambar sekali saat layar dibuka,
+            jadi begitu orang menggeser pilihannya, layar menyatakan hal yang
+            berlawanan dengan pilihan yang sedang terlihat: dropdown berbunyi
+            "Total pesanan (termasuk add-on)" sementara keterangannya berbunyi
+            "Add-on tidak dikomisikan". Ditemukan Mas Dik.
+
+            Ini bukan soal kerapian: orang memutuskan berdasarkan keterangan
+            itu, dan keterangan yang salah soal komisi berarti salah bayar. */''}
       ${pil('komisi_dari','Komisi dihitung dari',
         [['bruto','Harga tiket saja (tanpa add-on)'],
          ['neto','Total pesanan (termasuk add-on)']],
@@ -6951,6 +6970,49 @@ async function tabAtur(){
     ]
   });
   if (!ro) pasangKelolaProduk(produk || []);
+
+  /* Keterangan "Komisi dihitung dari" dihitung ulang tiap pilihannya diganti.
+     Tiga keterangan ikut: keterangan pilihan itu sendiri, dan dua contoh
+     tarif di sebelahnya — ketiganya berubah artinya begitu dasarnya diganti.
+     Kalau cuma satu yang diperbarui, yang dua lagi jadi berbohong. */
+  {
+    const sel = $('set_komisi_dari');
+    if (sel) {
+      const amb  = Number(data.ambang_tier) || 0;
+      const bwh  = Number(data.komisi_bawah_persen) || 0;
+      const ats  = Number(data.komisi_atas_persen) || 0;
+      const disk = Number(data.diskon_persen) || 0;
+      const hrg  = 150000;
+      const nilai = (tiket, persen, brt) => {
+        const om = hrg * tiket;
+        return Math.round((brt ? om : Math.round(om * (100 - disk) / 100)) * persen / 100);
+      };
+      const hintDari = el => el && el.parentElement
+        && el.parentElement.querySelector('.hint');
+      const perbarui = () => {
+        const neto = sel.value === 'neto';
+        const h = hintDari(sel);
+        if (h) h.innerHTML = neto
+          ? `Memakai <b>total pesanan</b>: sesudah diskon ${disk}% dan `
+            + `<b>sudah termasuk add-on</b>. Jadi agen ikut dapat komisi dari `
+            + `drone dan sewa alat, tapi komisinya juga ikut turun bersama `
+            + `diskon pembeli.`
+          : `Memakai <b>harga tiket saja</b>, sebelum diskon. Add-on `
+            + `<b>tidak</b> dikomisikan &mdash; agen yang berhasil menjual `
+            + `drone tidak dapat apa-apa dari situ.`;
+        if (!amb) return;
+        const hb = hintDari($('set_komisi_bawah_persen'));
+        if (hb) hb.innerHTML = `Agen dengan ${amb - 1} tiket @${rp(hrg)} &rarr; komisi `
+          + `<b>${rp(nilai(amb - 1, bwh, !neto))}</b>.`;
+        const ha = hintDari($('set_komisi_atas_persen'));
+        if (ha) ha.innerHTML = `Agen dengan ${amb} tiket @${rp(hrg)} &rarr; komisi `
+          + `<b>${rp(nilai(amb, ats, !neto))}</b> &mdash; tarif ini berlaku untuk `
+          + `SELURUH ${amb} tiket, bukan hanya yang ke-${amb}.`;
+      };
+      sel.addEventListener('change', perbarui);
+      perbarui();          /* sekaligus meluruskan keadaan awal */
+    }
+  }
 
   if (!ro) $('tblSimpan').onclick = async () => {
     const b=$('tblSimpan'); b.disabled=true; b.innerHTML='<span class="spin"></span> Menyimpan…';

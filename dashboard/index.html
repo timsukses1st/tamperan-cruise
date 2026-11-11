@@ -6576,10 +6576,29 @@ async function tabAtur(){
          ternyata wajib, NIK kembali dan dua kolom ini tinggal dimunculkan
          lagi di sini — TAPI penghapus otomatisnya harus benar-benar dibuat
          dulu sebelum setelan retensi ditampilkan kembali. -->
-    <div class="card"><h3>Leaderboard</h3><div class="grid g3" style="margin-bottom:0">
-      ${pil('lb_agen_mode','Leaderboard untuk agen',
-        [['off','Tidak ada'],['peringkat','Peringkat saja'],['penuh','Angka terbuka']])}
-    </div></div>
+    <!-- KARTU "Leaderboard" DIHAPUS 11 Nov 2026.
+
+         Setelan "Leaderboard untuk agen" menawarkan tiga pilihan — Tidak ada
+         / Peringkat saja / Angka terbuka — padahal lb_agen_mode TIDAK PERNAH
+         dibaca di mana pun: tidak di tabKomisi, tidak di tabRingkas, dan
+         tidak di satu pun fungsi database. Agen SELALU melihat angka penuh,
+         dipilih apa pun.
+
+         Itu setelan yang paling berbahaya dari semua yang dihapus hari ini,
+         karena bentuknya setelan PRIVASI. Memilih "Tidak ada" atau "Peringkat
+         saja" akan membuat orang yakin angka agen lain sudah disembunyikan,
+         padahal tidak ada yang berubah sama sekali.
+
+         Keputusan Mas Dik 11 Nov 2026: angka leaderboard memang sengaja
+         dibiarkan terbuka untuk semua agen. Jadi setelannya tidak diperlukan,
+         bukan sekadar belum dibangun — dan menghapusnya membuat layar jujur:
+         tidak ada lagi pilihan yang menjanjikan penyembunyian.
+
+         Kolom pengaturan.lb_agen_mode dibiarkan di database (nilainya
+         'penuh', cocok dengan perilaku sebenarnya). Kalau suatu saat
+         penyembunyian benar-benar dibutuhkan, yang harus dibangun DULU
+         penyaringnya di tabKomisi/tabRingkas — baru kolomnya ditampilkan
+         lagi di sini. -->
     ${ro?'':'<button class="btn" id="tblSimpan">Simpan pengaturan</button>'}
     <div class="card scrollx" id="kartu-produk">
       <h3 style="margin:0 0 4px">Produk &amp; Harga</h3>
@@ -6678,7 +6697,7 @@ async function tabAtur(){
     ['diskon_persen','ambang_tier','komisi_bawah_persen','komisi_atas_persen'].forEach(k=>{
       const v=$('set_'+k).value.trim(); isi[k]= v===''?null:Number(v);
     });
-    ['komisi_dari','periode_reset','lb_agen_mode']
+    ['komisi_dari','periode_reset']
       .forEach(k=> isi[k]=$('set_'+k).value);
     /* Kolom boolean dikirim sebagai boolean, bukan teks. value selalu String,
        dan 'false' itu nilai yang truthy — menyimpannya apa adanya akan

@@ -620,7 +620,7 @@ async function mulai(){
    PERTANYAAN YANG SAMA. Keberangkatan, Boarding, Pembagian Kapal, dan
    Manifest semuanya menjawab "siapa berlayar kapan, kapalnya mana, berapa
    yang hadir" — operator harus pindah-pindah tab untuk melihat SATU
-   rombongan secara utuh. Begitu juga Voucher & Tambahan yang sebenarnya
+   rombongan secara utuh. Begitu juga Voucher & Add-on yang sebenarnya
    bagian dari Pengaturan, dan Follow-Up yang sebenarnya satu saringan di
    atas daftar Pesanan.
 
@@ -629,7 +629,7 @@ async function mulai(){
 
      Keberangkatan  <- Keberangkatan + Boarding + Pembagian Kapal + Manifest
      Pesanan        <- Pesanan + Follow-Up
-     Pengaturan     <- Pengaturan + Voucher & Tambahan
+     Pengaturan     <- Pengaturan + Voucher & Add-on
 
    YANG SENGAJA TIDAK DIUBAH
    Isi ketiga belas fungsi tab tidak disentuh sama sekali. Sub-tampilan
@@ -653,7 +653,7 @@ const SUB_TAB = {
   ],
   atur: [
     ['harga',   'Harga & paket',      'atur'],
-    ['voucher', 'Voucher & tambahan', 'voucher'],
+    ['voucher', 'Voucher & add-on',  'voucher'],
     ['galeri',  'Galeri foto',        'galeri'],
   ],
 };
@@ -2252,7 +2252,7 @@ const TUTOR = {
          + 'mutasi penyeimbang, bukan dengan menghapus jejaknya. Saldo di tabel atas '
          + 'dijumlahkan dari sini tiap kali layar dibuka &mdash; tidak ada kolom saldo '
          + 'tersimpan yang bisa melenceng.' },
-    { tab:'voucher', cari:'#isi table[data-papan="voucher"]', judul:'Voucher & Tambahan',
+    { tab:'voucher', cari:'#isi table[data-papan="voucher"]', judul:'Voucher & Add-on',
       teks:'Kode voucher membuka harga warga Pacitan. Di bawahnya ada harga add-on '
          + 'drone dan paddleboard yang bisa diubah dari sini.' },
     { tab:'akses', cari:'#isi #baris-akses', judul:'Kelola Akses',
@@ -2284,7 +2284,7 @@ const TUTOR = {
     { cari:'#navTab', judul:'Lima tab Anda',
       teks:'Pesanan untuk konfirmasi pembayaran, Pembagian Kapal untuk menempatkan rombongan, '
          + 'Keberangkatan untuk melihat ringkasannya per tanggal, lalu '
-         + 'Voucher &amp; Tambahan dan Pengaturan untuk mengatur harga.' },
+         + 'Voucher &amp; Add-on dan Pengaturan untuk mengatur harga.' },
     { tab:'pesanan', cari:'#isi .papan-atas .cari', judul:'Cari pesanan',
       teks:'Ketik kode pesanan yang disebut pelanggan di chat. Tidak perlu lengkap.' },
     { tab:'pesanan', cari:'#isi [data-bayar]',
@@ -3228,7 +3228,7 @@ async function popDp(kode, total, dpSekarang, muatUlang){
     <div class="note"><b>Mengisi salah satu saja sudah cukup</b>
       Kolom satunya ikut terisi sendiri. Yang masuk ke database hanya rupiahnya;
       persen dihitung ulang dari total setiap kali ditampilkan. Jadi kalau nanti
-      jumlah orang atau tambahan diubah, nominal DP ini <b>tidak ikut berubah</b> —
+      jumlah orang atau add-on diubah, nominal DP ini <b>tidak ikut berubah</b> —
       persennya yang bergeser. Kosongkan dua-duanya untuk membatalkan kesepakatan
       DP (pesanan kembali dianggap bayar penuh).</div>
 
@@ -5454,7 +5454,7 @@ async function tabVoucher(){
       <button type="button" class="btn" id="t-buat">Tambahkan add-on</button>
     </div>` : ''}
     <div class="card scrollx">
-      <h3>Tambahan (Add-on)</h3>
+      <h3>Add-on</h3>
       <table data-papan="tambahan">
         <thead><tr><th class="nw">Nama</th><th class="nw">Satuan</th><th class="num">Harga</th>
           <th class="num">Maks</th><th class="nw">Status</th><th></th></tr></thead>
@@ -5599,7 +5599,7 @@ async function tabVoucher(){
       const { error } = await DB.from('tambahan')
         .update({ aktif: b.dataset.nilai==='1' }).eq('id', b.dataset.taktif);
       if (error){ b.style.pointerEvents=''; return gagalPesan(error); }
-      pesan('Status tambahan diperbarui. Halaman pemesanan langsung ikut.'); tabVoucher();
+      pesan('Status add-on diperbarui. Halaman pemesanan langsung ikut.'); tabVoucher();
     });
     pasangEditorHarga(tamb||[]);
   }
@@ -5609,7 +5609,7 @@ async function tabVoucher(){
     saring: [{ kolom: 2, semua: 'Semua status', pilihan: ['AKTIF','NONAKTIF'] }]
   });
   lengkapiTabel('#isi table[data-papan="tambahan"]', {
-    id: 'tambahan', takUrut: [5], petunjuk: 'Cari nama tambahan…'
+    id: 'tambahan', takUrut: [5], petunjuk: 'Cari nama add-on…'
   });
 }
 

@@ -15,7 +15,9 @@
        slug          -> kode tetap
        tier          -> tarif / tingkat
        ambang        -> batas
-       retroaktif    -> berlaku surut
+       retroaktif    -> sebutkan akibatnya langsung: "tiket yang sudah
+                        terjual ikut naik tarifnya". JANGAN "berlaku surut" —
+                        itu bahasa hukum, bukan bahasa dermaga (Mas Dik, 11 Nov)
        omzet         -> penjualan / total penjualan
        bruto / neto  -> harga sebelum diskon / harga sesudah diskon
        pax           -> orang
@@ -2361,7 +2363,8 @@ const TUTOR = {
          + 'tiap pesanan membekukan harganya sendiri saat dibuat.' },
     { tab:'atur', cari:'#isi .kpi, #isi .card', judul:'Diskon & komisi',
       teks:'Di kartu paling atas ada diskon konsumen dan tarif komisi agen. '
-         + '<b>Hati-hati dengan komisi:</b> tarifnya <b>berlaku surut</b>, jadi mengubahnya '
+         + '<b>Hati-hati dengan komisi:</b> tarif baru ikut mengubah tiket yang <b>sudah '
+         + 'terjual</b>, jadi mengubahnya '
          + 'di tengah bulan ikut mengubah bayaran seluruh tiket bulan itu. '
          + 'Setiap perubahan tercatat di catatan kegiatan atas nama Anda.' },
     /* cari:null -> kartu di tengah layar. Tombol Panduan ada di bar yang menempel,
@@ -2378,7 +2381,7 @@ const TUTOR = {
          + 'Follow-Up Saya untuk mengejar pesanan yang belum jadi.' },
     { tab:'komisi', cari:'#isi .kpi', judul:'Komisi Anda',
       teks:'Jumlah tiket, total penjualan, dan komisi Anda. Komisi naik dari 5% ke 10% setelah tembus '
-         + '20 tiket, dan berlaku surut untuk semua tiket.' },
+         + '20 tiket, dan kenaikan itu ikut berlaku untuk tiket yang sudah terjual.' },
     { tab:'komisi', cari:'#isi table[data-papan="pelangganku"]',
       judul:'Pelanggan Anda',
       teks:'Nomor HP ditampilkan utuh supaya Anda bisa menghubungi langsung. '
@@ -2764,7 +2767,7 @@ async function tabRingkas(){
             <div class="num"><div style="font-weight:700">${rp(a.omzet)}</div>
               <div style="font-size:11.5px;color:var(--muted)">komisi ${rp(a.komisi)}</div></div>
           </div>`).join('') : '<div class="hint">Belum ada penjualan lunas.</div>'}
-        <div class="note w"><b>Tarif baru berlaku surut</b>
+        <div class="note w"><b>Tiket yang sudah terjual ikut naik tarifnya</b>
           Begitu jumlah tiketnya tembus batas, seluruh penjualan bulan itu ikut naik tarifnya — bukan hanya tiket sesudahnya.</div>
       </div>
       <div class="card"><h3>Penjualan per Produk
@@ -6500,8 +6503,8 @@ async function tabAtur(){
           Satu tiket tambahan menaikkan komisinya
           <b>${rp(ssdh.nilai - sblm.nilai)}</b>, karena tarif baru itu berlaku
           untuk <b>SELURUH ${amb} tiket</b> &mdash; bukan hanya tiket ke-${amb}.
-          Karena berlaku surut begini, <b>mengubah tarif di tengah periode ikut
-          mengubah komisi yang sudah berjalan.</b></div>`;
+          Karena ikut mundur ke tiket lama begini, <b>mengubah tarif di tengah
+          bulan ikut mengubah komisi yang sudah berjalan.</b></div>`;
       })()}
       <div class="grid g3" style="margin-bottom:0">
       ${(() => {
@@ -6818,8 +6821,8 @@ async function tabKomisi(){
           ? 'p-ok' : 'p-warn'}">TARIF ${saya.tarif}%</span></div>
       ${ambang ? `<div class="prog"><i style="width:${
         Math.min(100, saya.tiket / ambang * 100)}%"></i></div>` : ''}
-      <div style="font-size:12.5px;color:var(--muted)">Tarif ini berlaku surut ke seluruh
-        ${saya.tiket} tiket, bukan hanya tiket sesudah batas.
+      <div style="font-size:12.5px;color:var(--muted)">Tarif ini dipakai untuk seluruh
+        ${saya.tiket} tiket Anda &mdash; termasuk yang sudah terjual sebelum batas tercapai.
         ${ambang && sisa ? ` Kurang <b>${sisa} tiket</b> lagi menuju tarif
           ${aturTier.r_atas ? Number(aturTier.r_atas) + '%' : 'lebih tinggi'}.` : ''}
         ${!ambang ? ' <b>Batas tiket belum terbaca</b> — grafiknya disembunyikan '
@@ -6829,14 +6832,14 @@ async function tabKomisi(){
       <div class="kpi"><div class="k">Komisi Berjalan</div><div class="v">${rp(saya.komisi)}</div>
         <div class="d">belum final, bisa berubah</div></div>
       <div class="kpi"><div class="k">Tarif Saat Ini</div><div class="v">${saya.tarif}%</div>
-        <div class="d">berlaku surut ke semua tiket</div></div>
+        <div class="d">dipakai untuk semua tiket Anda</div></div>
       <div class="kpi"><div class="k">Tiket Terjual</div><div class="v">${saya.tiket}</div>
         <div class="d">penjualan ${rp(saya.omzet)}</div></div>
       <div class="kpi"><div class="k">Peringkat</div><div class="v">${pos||'—'}</div>
         <div class="d">dari ${L.length} agen</div></div>
     </div>
     <div class="note w"><b>Kenapa ditulis "berjalan", bukan angka final</b>
-      Komisi berlaku surut — begitu jumlah tiketnya tembus batas, seluruh tiket ikut naik tarifnya.
+      Begitu jumlah tiketnya tembus batas, tiket yang sudah terjual pun ikut naik tarifnya.
       Jadi angkanya berubah selama bulan ini masih jalan, dan baru dikunci saat komisi dibayarkan.</div>
     <div class="card"><h3>Top Penjualan</h3>
       ${L.map((a,i)=>{

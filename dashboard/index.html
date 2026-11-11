@@ -2703,17 +2703,27 @@ async function tabRingkas(){
   if (S.periode === undefined) S.periode = periodeKini();
   const per = S.periode || null;
 
-  const [{data:r, error:er}, {data:lb}, {data:ord, error:eo}, {data:prd}] = await Promise.all([
+  const [{data:r, error:er}, {data:lb}, {data:ord, error:eo}, {data:prd},
+         {data:atr}] = await Promise.all([
     DB.rpc('ringkasan_dashboard',{p_periode:per}),
     DB.rpc('papan_peringkat',{p_periode:per}),
     /* `dibuat` ikut diambil supaya penyaringan bulan di sini memakai kolom
        yang SAMA dengan yang dipakai kedua fungsi di atas. */
     DB.from('pesanan').select('pax,total,status,dibuat,produk(nama)').in('status',['paid','boarded']),
     DB.rpc('periode_pesanan'),
+    /* Ambang & tarif ikut diambil supaya contoh di kartu Leaderboard memakai
+       angka yang BENAR-BENAR terpasang, bukan 20/5%/10% yang ditulis tangan.
+       Contoh yang angkanya ditulis tangan akan berbohong diam-diam begitu
+       Pak Dika mengubah ambangnya di Pengaturan. */
+    DB.rpc('tier_aturan'),
   ]);
   if (er) return gagal(er);
   if (eo) return gagal(eo);
   const k = (r&&r[0])||{}, L = lb||[];
+  const tr   = (atr && atr[0]) || {};
+  const amb  = Number(tr.r_ambang) || 0;
+  const bwh  = Number(tr.r_bawah)  || 0;
+  const ats  = Number(tr.r_atas)   || 0;
 
   /* Penjualan per produk — dihitung dari pesanan lunas, disaring periode */
   const perProduk = {};
@@ -2767,8 +2777,15 @@ async function tabRingkas(){
             <div class="num"><div style="font-weight:700">${rp(a.omzet)}</div>
               <div style="font-size:11.5px;color:var(--muted)">komisi ${rp(a.komisi)}</div></div>
           </div>`).join('') : '<div class="hint">Belum ada penjualan lunas.</div>'}
-        <div class="note w"><b>Tiket yang sudah terjual ikut naik tarifnya</b>
-          Begitu jumlah tiketnya tembus batas, seluruh penjualan bulan itu ikut naik tarifnya — bukan hanya tiket sesudahnya.</div>
+        ${amb && ats ? `<div class="note w"><b>Komisi bisa melompat gara-gara satu tiket</b>
+          Agen jual <b>${amb - 1} tiket</b> bulan ini &rarr; komisinya <b>${bwh}%</b> per tiket.<br>
+          Jual <b>1 lagi</b> (jadi ${amb} tiket) &rarr; tarifnya naik jadi <b>${ats}%</b> &mdash;
+          dan ${ats}% itu dihitung ulang untuk <b>semua ${amb} tiket</b>, bukan cuma tiket ke-${amb}.
+          <br><br>
+          Jadi kalau angka komisi di sini tiba-tiba naik banyak padahal penjualannya
+          cuma nambah sedikit, kemungkinan besar ada agen yang baru saja tembus
+          ${amb} tiket. Itu normal, bukan salah hitung.</div>`
+        : ''}
       </div>
       <div class="card"><h3>Penjualan per Produk
         <span class="pill p-mute">${esc(namaPeriode(S.periode))}</span></h3>

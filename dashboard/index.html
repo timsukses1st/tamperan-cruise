@@ -693,7 +693,15 @@ const SUB_TAB = {
   berangkat: [
     ['daftar',   'Daftar',          'boarding'],
     ['kapal',    'Pembagian kapal', 'kapal'],
-    ['ringkas',  'Per tanggal',     'berangkat'],
+    /* 11 Nov 2026 — "Per tanggal" dan "Manifest" DILEBUR jadi satu atas
+       permintaan Mas Dik. Keduanya berporos tanggal keberangkatan dan orang
+       harus bolak-balik: lihat tanggal mana yang ramai di satu layar, lalu
+       pindah layar untuk tahu siapa saja yang berangkat.
+
+       Sekarang satu layar bertingkat: ringkasan per tanggal adalah DAFTAR
+       ISI-nya, klik barisnya untuk melihat daftar orangnya. tabBerangkat()
+       tetap dipakai sebagai penggambar ringkasannya — kode yang sudah
+       terbukti jalan tidak ditulis ulang, cuma dipanggil dari tempat lain. */
     ['manifest', 'Manifest',        'manifest'],
   ],
   pesanan: [
@@ -787,6 +795,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-11g', 'Manifest & Per tanggal dilebur jadi satu layar bertingkat: klik tanggalnya untuk melihat daftar orangnya'],
   ['2026-11-11f', 'PERBAIKAN: dashboard tidak bisa login (pengunci komisi latihan dipanggil sebelum waktunya)'],
   ['2026-11-11e', 'Komisi dikunci per pesanan; add-on ikut dikomisikan; kolom Komisi di tab Pesanan & Komisi'],
   ['2026-11-11d', 'Keberangkatan: KPI jadi "Hari keberangkatan" (dulu salah menghitung baris), fungsi layarnya dijelaskan'],
@@ -887,7 +896,12 @@ async function siapkanAgenPratinjau(){
 const LAYAR = {
   ringkas:tabRingkas, pesanan:tabPesanan, fu:tabFollowUp, manifest:tabManifest,
   agen:tabAgen, atur:tabAtur, komisi:tabKomisi, boarding:tabBoarding,
-  kapal:tabKapal, berangkat:tabBerangkat, voucher:tabVoucher,
+  /* 'berangkat' DIKELUARKAN dari daftar layar 11 Nov 2026: sejak dilebur ke
+     Manifest, ia tidak lagi bisa dibuka sendiri — tabManifest() yang
+     memanggilnya sebagai tampilan tingkat pertama. Dibiarkan di daftar ini
+     berarti ada layar yang terdaftar tapi tidak punya pintu, dan pemeriksa
+     navigasi memang menangkapnya. */
+  kapal:tabKapal, voucher:tabVoucher,
   biro:tabBiro, akses:tabAkses, galeri:tabGaleri,
 };
 
@@ -2351,7 +2365,7 @@ const TUTOR = {
          + 'Kalau pesanannya sudah ada DP, setelah dibatalkan muncul tombol '
          + '<b>DP &rarr; deposit</b> untuk memindahkan uangnya jadi saldo. '
          + 'Semuanya tercatat di catatan kegiatan atas nama Anda.' },
-    { tab:'berangkat', cari:['#isi .kpi:nth-child(3)','#isi .kpi'], judul:'Keberangkatan',
+    { tab:'manifest', cari:['#isi .kpi:nth-child(3)','#isi .kpi'], judul:'Keberangkatan',
       teks:'Tiket terjual per tanggal berangkat. Perhatikan "Belum dapat kapal" — kalau angkanya '
          + 'oranye, masih ada rombongan yang belum ditempatkan.' },
     { tab:'kapal', cari:'#isi [data-kapal]', judul:'Pembagian Kapal',
@@ -2361,7 +2375,11 @@ const TUTOR = {
       teks:'Di sinilah kapal ditambah dan <b>kapasitas izin</b>-nya diisi. Angka kapasitas '
          + 'inilah yang dipakai kartu muatan di bawah &mdash; isi sesuai izin kapalnya, '
          + 'jangan diperkirakan. Boleh dikosongkan kalau izinnya belum keluar.' },
-    { tab:'manifest', cari:'#isi table[data-papan="manifest"]', judul:'Manifest keberangkatan',
+    /* Sasarannya tabel RINGKASAN, bukan tabel manifest: sejak dilebur, yang
+       tampil lebih dulu adalah daftar tanggal. Tabel manifest baru ada setelah
+       satu tanggal diklik, dan mulaiTutor() diam-diam melewati langkah yang
+       elemennya tidak ketemu — langkah ini akan hilang tanpa ada yang tahu. */
+    { tab:'manifest', cari:'#isi table[data-papan="berangkat"]', judul:'Manifest keberangkatan',
       teks:'Satu baris per <b>rombongan</b>, bukan per orang. Sejak 27 Okt 2026 nama penumpang '
          + 'satu per satu memang tidak dikumpulkan lagi &mdash; yang bernama di sini adalah '
          + '<b>pemesannya</b>, yang bertanggung jawab atas rombongan. Kalau syahbandar meminta '
@@ -2446,7 +2464,7 @@ const TUTOR = {
     { tab:'kapal', cari:'#isi [data-kapal]', judul:'Bagi kapal',
       teks:'Pilih Kapal 1 atau Kapal 2 lewat dropdown. Perhatikan kartu muatan di atas: '
          + 'kalau merah, muatannya melebihi kapasitas kapal.' },
-    { tab:'berangkat', cari:['#isi .kpi:nth-child(3)','#isi .kpi'], judul:'Periksa sebelum berangkat',
+    { tab:'manifest', cari:['#isi .kpi:nth-child(3)','#isi .kpi'], judul:'Periksa sebelum berangkat',
       teks:'Pastikan "Belum dapat kapal" sudah nol untuk tanggal yang akan berangkat.' },
     { tab:'voucher', cari:'#isi table[data-papan="tambahan"]', judul:'Harga add-on',
       teks:'Harga Drone dan Paddleboard bisa Anda ubah dari sini: tekan <b>Ubah</b> di kolom Harga. '
@@ -4422,6 +4440,9 @@ async function tabFollowUp(){
    NIK tetap memakai pengaturan nik_siapa_boleh_lihat yang sudah ada.
    ==================================================================== */
 async function tabManifest(){
+  /* Belum memilih tanggal -> tampilkan ringkasannya dulu. */
+  if (!S.mfTgl) return tabBerangkat();
+
   const [{data:ord, error:e1}, {data:atur}] = await Promise.all([
     DB.from('pesanan').select('kode,tipe,pax,anak,jml_naik,status,tanggal_berangkat,'
       + 'pemesan_nama,pemesan_hp,pemesan_nik,pemesan_alamat,biro_nama,biro_pic,'
@@ -4437,7 +4458,11 @@ async function tabManifest(){
     : bolehNik ? `<span class="mono" style="font-size:11.5px">${esc(n)}</span>`
     : `<span class="mono" style="font-size:11.5px">${esc(n.slice(0,4))} •••• •••• ${esc(n.slice(-4))}</span>`;
 
-  const baris = ord || [];
+  /* Disaring di sini, bukan di query: ord dipakai juga untuk menghitung
+     berapa tanggal lain yang masih menunggu, dan query kedua cuma untuk itu
+     adalah perjalanan bolak-balik yang tidak perlu. */
+  const semua = ord || [];
+  const baris = semua.filter(o => o.tanggal_berangkat === S.mfTgl);
   const tot  = baris.reduce((a,o) => a + (o.pax || 0), 0);
   const naik = baris.reduce((a,o) => a + (o.jml_naik || 0), 0);
   const anak = baris.reduce((a,o) => a + (o.anak || 0), 0);
@@ -4445,9 +4470,13 @@ async function tabManifest(){
   const hariIni = new Date().toISOString().slice(0,10);
 
   $('isi').innerHTML = `
+    <div class="papan-atas" style="margin-bottom:12px">
+      <button type="button" class="btn ghost" id="mf-kembali">&larr; Semua tanggal</button>
+      <span style="font-weight:600">${esc(tglPanjang(S.mfTgl))}</span>
+    </div>
     <div class="grid g4">
       <div class="kpi"><div class="k">Rombongan</div><div class="v">${baris.length}</div>
-        <div class="d">pesanan sah</div></div>
+        <div class="d">pesanan sah tanggal ini</div></div>
       <div class="kpi"><div class="k">Total penumpang</div><div class="v">${tot}</div>
         <div class="d">dihitung per kepala</div></div>
       <div class="kpi"><div class="k">Sudah naik</div>
@@ -4458,7 +4487,8 @@ async function tabManifest(){
         <div class="d">life jacket ukuran anak</div></div>
     </div>
     <div class="card scrollx">
-      <h3>Manifest Keberangkatan <span class="pill p-mute">${baris.length}</span></h3>
+      <h3>Manifest ${esc(tglPanjang(S.mfTgl))}
+        <span class="pill p-mute">${baris.length} rombongan</span></h3>
       <table data-papan="manifest">
         <thead><tr><th class="nw">Berangkat</th><th class="nw">Kapal</th><th class="nw">Kode</th>
           <th>Pemesan</th><th class="nw">WhatsApp</th><th class="nw">Produk</th>
@@ -4532,6 +4562,8 @@ async function tabManifest(){
         Hanya ${atur.nik_siapa_boleh_lihat === 'super_owner' ? 'Super Admin & Owner' : 'Super Admin'}
         yang melihat NIK penuh. Pengaturannya ada di tab Pengaturan.</div>` : ''}
     </div>`;
+
+  $('mf-kembali').onclick = () => { S.mfTgl = null; tabManifest(); };
 
   lengkapiTabel('#isi table[data-papan="manifest"]', {
     id: 'manifest',
@@ -5372,8 +5404,10 @@ async function tabBerangkat(){
           <th class="num">Pesanan</th><th class="num">Orang</th><th class="num">Anak</th>
           <th class="num">Belum berkapal</th>
           ${S.peran==='admin' ? '' : '<th class="num">Nilai</th>'}</tr></thead>
-        <tbody>${baris.length ? baris.map(b=>`<tr>
-          <td class="nw"><b>${tglPanjang(b.tanggal)}</b></td>
+        <tbody>${baris.length ? baris.map(b=>`<tr data-mf-tgl="${esc(b.tanggal)}"
+          style="cursor:pointer" title="Lihat daftar orang yang berangkat tanggal ini">
+          <td class="nw"><b>${tglPanjang(b.tanggal)}</b>
+            <div class="hint">lihat daftarnya &rarr;</div></td>
           <td class="nw">${esc(b.produk)}</td>
           <td class="num">${b.jml_pesanan}</td>
           <td class="num">${b.jml_pax}</td>
@@ -5384,20 +5418,33 @@ async function tabBerangkat(){
         </tr>`).join('') : `<tr><td colspan="7"><div class="hint">
           Belum ada pesanan yang punya tanggal keberangkatan.</div></td></tr>`}</tbody>
       </table>
-      <div class="note"><b>Layar ini untuk melihat beban ke depan</b>
-        Dipakai buat menyiapkan kapal dan orang: tanggal mana yang sudah ramai,
-        berapa orang yang akan berangkat, dan mana yang penumpangnya belum
-        ditempatkan ke kapal. Tidak ada tombol di sini &mdash; pembagian kapalnya
-        dikerjakan di <b>Pembagian kapal</b>, daftar yang berangkat hari ini ada
-        di <b>Daftar</b>, dan daftar nama untuk syahbandar di <b>Manifest</b>.
+      <div class="note"><b>Klik barisnya untuk melihat siapa saja yang berangkat</b>
+        Layar ini menjawab <b>berapa</b>: tanggal mana sudah ramai, berapa orang,
+        mana yang penumpangnya belum ditempatkan ke kapal. Klik satu baris dan
+        layarnya berganti jadi manifest tanggal itu &mdash; yang menjawab
+        <b>siapa</b>, lengkap dengan nama pemesan dan nomornya, siap diserahkan
+        ke syahbandar.
         <br><br>
         Angka di kolom <b>Belum berkapal</b> yang masih kuning berarti pesanan itu
-        belum tahu naik kapal yang mana. Pastikan sudah nol sebelum hari H.</div>
+        belum tahu naik kapal yang mana. Pembagian kapalnya dikerjakan di
+        <b>Pembagian kapal</b>; pastikan sudah nol sebelum hari H.</div>
       <div class="note"><b>Pesanan lama tidak punya tanggal</b>
         Tanggal keberangkatan baru dikumpulkan sejak fitur ini dipasang. Pesanan
         sebelum itu tidak muncul di sini — bukan hilang, memang tanggalnya tidak
         pernah ditanyakan.</div>
     </div>`;
+
+  /* Dipasang di INDUKNYA, bukan di tiap baris. lengkapiTabel() menggambar
+     ulang isi tabel setiap kali disaring atau dicari — pemasang per baris
+     ikut terbuang bersama baris lamanya, dan baris hasil saringan jadi tidak
+     bisa diklik sama sekali. Yang paling menyesatkan: barisnya TETAP terlihat
+     bisa diklik (kursornya berubah), cuma diam saja waktu ditekan. */
+  $('isi').onclick = e => {
+    const tr = e.target.closest('[data-mf-tgl]');
+    if (!tr) return;
+    S.mfTgl = tr.dataset.mfTgl;
+    tabManifest();
+  };
 
   lengkapiTabel('#isi table[data-papan="berangkat"]', {
     id: 'berangkat', petunjuk: 'Cari tanggal atau pelayaran…',

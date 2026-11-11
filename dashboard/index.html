@@ -5418,34 +5418,35 @@ async function tabVoucher(){
 
     ${bisaT ? `<div class="card">
       <h3>Tambah add-on baru</h3>
-      <div class="grid g3">
+      <!-- PILIHAN SATUAN DIHAPUS 11 Nov 2026 atas permintaan Mas Dik: tiga
+           pilihan (per pesanan / per orang / per unit) bikin orang berhenti dan
+           menebak. Semua add-on BARU sekarang selalu 'per unit' — pemesan
+           mengetik sendiri jumlahnya, dan kolom Maksimal yang membatasinya.
+           Maksimal = 1 memberi perilaku persis "per pesanan" yang lama.
+           Baris lama di database (Drone + Pilot = per pesanan) TIDAK diubah;
+           kolom satuan tetap ada dan tabel di bawah tetap menampilkannya. -->
+      <div class="grid g2">
         <div class="fld"><label for="t-nama">Nama</label>
           <input id="t-nama" placeholder="mis. Sewa Snorkeling" maxlength="80">
           <div class="hint">Yang dibaca pemesan di halaman pemesanan.</div></div>
-        <div class="fld"><label for="t-satuan">Satuan</label>
-          <select id="t-satuan">
-            <option value="pesanan">per pesanan — sekali, berapa pun jumlah orang</option>
-            <option value="orang">per orang — otomatis dikali jumlah pax</option>
-            <option value="unit">per unit — pemesan mengetik jumlahnya</option>
-          </select>
-          <div class="hint" id="t-satuan-ket">Dikenakan sekali per pesanan.</div></div>
-        <div class="fld"><label for="t-harga">Harga (Rp)</label>
+        <div class="fld"><label for="t-harga">Harga per unit (Rp)</label>
           <input id="t-harga" inputmode="numeric" placeholder="mis. 150000">
-          <div class="hint">Per satuan yang dipilih. Tidak boleh 0.</div></div>
+          <div class="hint">Harga untuk <b>satu</b> buah. Tidak boleh 0.</div></div>
       </div>
       <div class="grid g2">
-        <!-- SATU atribut class saja. Ditulis dua kali ("fld" lalu "sembunyi"),
-             browser memakai yang pertama dan membuang sisanya — kolomnya akan
-             tetap terlihat padahal kodenya tampak menyembunyikan. -->
-        <div class="fld sembunyi" id="t-maks-bungkus">
+        <div class="fld" id="t-maks-bungkus">
           <label for="t-maks">Maksimal per pesanan</label>
           <input id="t-maks" inputmode="numeric" placeholder="kosongkan = tanpa batas">
-          <div class="hint">Hanya untuk satuan <b>per unit</b>. Membatasi angka yang
-            boleh diketik pemesan.</div></div>
+          <div class="hint">Batas angka yang boleh diketik pemesan.
+            Isi <b>1</b> kalau hanya boleh satu per pesanan.</div></div>
         <div class="fld"><label for="t-ket">Keterangan</label>
           <input id="t-ket" placeholder="mis. Termasuk instruktur pendamping." maxlength="160">
           <div class="hint">Baris kecil di bawah nama. Boleh dikosongkan.</div></div>
       </div>
+      <div class="note"><b>Pemesan mengetik jumlahnya sendiri</b>
+        Totalnya = harga per unit &times; angka yang diketik pemesan. Kalau add-on
+        ini cuma masuk akal sekali per pesanan (mis. sewa drone), isi
+        <b>Maksimal = 1</b> &mdash; hasilnya sama dengan "per pesanan".</div>
       <div class="note"><b>Kode slug dibuat otomatis dari namanya</b>
         <span class="mono" id="t-slug-pratinjau">—</span> &mdash; huruf kecil, angka,
         dan strip. Slug ini yang dikirim halaman pemesanan ke database waktu orang
@@ -5474,9 +5475,11 @@ async function tabVoucher(){
         </tr>`).join('')}</tbody>
       </table>
       <div class="note"><b>Satuan menentukan cara menghitungnya</b>
+        <b>per unit</b> = pemesan sendiri yang mengetik jumlahnya, dibatasi kolom Maks.
+        Semua add-on <b>baru</b> dibuat dengan satuan ini.<br>
+        Dua satuan lama masih dipakai baris yang sudah ada dan tetap berjalan:
         <b>per pesanan</b> = dikenakan sekali, berapa pun jumlah penumpang ·
-        <b>per orang</b> = otomatis dikali jumlah pax ·
-        <b>per unit</b> = pemesan sendiri yang mengetik jumlahnya, dibatasi kolom Maks.</div>
+        <b>per orang</b> = otomatis dikali jumlah pax.</div>
       <div class="note w"><b>Add-on berharga Rp0 tidak bisa dipesan</b>
         Database menolaknya dengan sengaja — harga 0 hampir selalu berarti harganya
         belum ditentukan, bukan benar-benar gratis. Isi harganya dulu, baru aktifkan.</div>
@@ -5524,37 +5527,24 @@ async function tabVoucher(){
       .slice(0, 40)
       .replace(/-+$/, '');                                /* jangan berakhir strip */
 
-    const tNama = $('t-nama'), tSat = $('t-satuan'), tMaks = $('t-maks-bungkus');
+    const tNama = $('t-nama');
     const gambarSlug = () => {
       const s = keSlug(tNama.value);
       $('t-slug-pratinjau').textContent = s || '—';
     };
     tNama.addEventListener('input', gambarSlug);
 
-    /* Kolom Maks hanya masuk akal untuk satuan 'unit' — dua satuan lain
-       jumlahnya ditentukan sistem, bukan pemesan. Menampilkannya di sana
-       mengundang orang mengisi batas yang tidak pernah dipakai. */
-    const KET_SATUAN = {
-      pesanan: 'Dikenakan sekali per pesanan, berapa pun jumlah orangnya.',
-      orang:   'Otomatis dikali jumlah penumpang di pesanan itu.',
-      unit:    'Pemesan sendiri yang mengetik jumlahnya, dibatasi kolom Maks.',
-    };
-    const terapkanSatuan = () => {
-      const u = tSat.value === 'unit';
-      tMaks.classList.toggle('sembunyi', !u);
-      if (!u) $('t-maks').value = '';
-      $('t-satuan-ket').textContent = KET_SATUAN[tSat.value] || '';
-    };
-    tSat.addEventListener('change', terapkanSatuan);
-    terapkanSatuan();
+    /* Satuan tidak lagi dipilih: add-on baru SELALU 'unit'. Kolom Maks karena
+       itu selalu tampil — di satuan 'unit' ia memang selalu berlaku. */
+    const SATUAN_BARU = 'unit';
 
     $('t-buat').onclick = async () => {
       const nama = tNama.value.trim();
       const slug = keSlug(nama);
       const harga = angkaRp($('t-harga').value);
-      const satuan = tSat.value;
+      const satuan = SATUAN_BARU;
       const maksRaw = $('t-maks').value.trim();
-      const maks = satuan === 'unit' && maksRaw !== '' ? angkaRp(maksRaw) : null;
+      const maks = maksRaw !== '' ? angkaRp(maksRaw) : null;
 
       if (!nama) return pesan('Nama add-on wajib diisi.', 7000);
       /* Pola slug dijaga database; diperiksa di sini supaya penolakannya

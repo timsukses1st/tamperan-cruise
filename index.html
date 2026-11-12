@@ -1220,7 +1220,7 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
           <div class="fld"><label for="f-alamat">Alamat sesuai KTP</label>
             <textarea id="f-alamat" rows="2" autocomplete="street-address"
               placeholder="Jalan, RT/RW, kelurahan, kecamatan, kabupaten/kota, provinsi"></textarea>
-            <div class="hint">Ditulis sesuai KTP untuk manifest resmi keberangkatan.</div></div>
+            <div class="hint">Ditulis sesuai KTP untuk manifest keberangkatan.</div></div>
           <div class="fld"><label for="f-prov">Provinsi asal <span style="font-weight:400;color:var(--muted)">(boleh kosong)</span></label>
             <input id="f-prov" autocomplete="address-level1">
             <div class="hint">Untuk pendataan asal wisatawan. Boleh beda dengan alamat KTP.</div></div>
@@ -1353,7 +1353,7 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
          dinaikkan TERPISAH ke Vercel, jadi dua-duanya perlu nomor sendiri:
          kalau cuma satu yang punya, salah satu bisa tertinggal tanpa ketahuan.
          Perbarui baris ini tiap kali berkas ini dikirim ulang. -->
-    <span style="opacity:.55;font-size:11.5px">versi 2026-11-11i</span>
+    <span style="opacity:.55;font-size:11.5px">versi 2026-11-12a</span>
   </footer>
 </div>
 
@@ -2557,12 +2557,28 @@ const TUTOR = [
      seperti tutorial game yang menyuruh menekan sesuatu dulu sebelum lanjut.
      Tanpa ini, langkah-langkah form tersaring habis pada kunjungan pertama
      (formnya memang belum ada di layar) dan isi pemesanan tidak pernah dijelaskan. */
-  { cari:'#gate', judul:'Kode agen dulu', tunggu: () => S.kodeOk,
+  /* Judul dan teks langkah ini MENGIKUTI saklar gerbang, sama seperti kotak
+     kode agennya sendiri (.gerbang-tutup / .gerbang-buka). Dipakai getter,
+     bukan teks tetap, karena TUTOR disusun SEBELUM gerbang_pesan() terjawab —
+     getter membaca S.gerbangBuka saat kartunya digambar, bukan saat berkas
+     dimuat. Dulu teksnya selalu versi tertutup ("dilayani lewat agen resmi"),
+     jadi waktu jalur tanpa agen dibuka, panduan bertentangan dengan kotak
+     yang ia sorot. tunggu() tidak perlu diubah: di jalur terbuka S.kodeOk
+     sudah true sejak awal, jadi langkah ini tidak pernah menahan. */
+  { cari:'#gate', tunggu: () => S.kodeOk,
     tungguTeks:'Isi kode agen dulu',
-    teks:'Pemesanan di The Tamperan Cruise dilayani lewat agen resmi. Masukkan kode '
-       + 'dari agen Anda di kotak ini, lalu tekan <b>Periksa kode</b>. Kalau benar, '
-       + 'muncul tanda hijau SAH dan form pemesanan terbuka &mdash; panduan ini lanjut sendiri. '
-       + 'Kalau merah, kodenya salah ketik atau sudah tidak berlaku.' },
+    get judul(){ return S.gerbangBuka ? 'Kode agen (kalau ada)' : 'Kode agen dulu'; },
+    get teks(){
+      return S.gerbangBuka
+        ? 'Kalau Anda dibantu salah satu agen resmi kami, masukkan kodenya di kotak ini '
+          + 'lalu tekan <b>Periksa kode</b>. Kalau benar, muncul tanda hijau SAH. '
+          + '<b>Tidak punya kode? Kosongkan saja</b> &mdash; formulir di bawah tetap bisa '
+          + 'diisi dan pesanan Anda kami layani langsung.'
+        : 'Pemesanan di The Tamperan Cruise dilayani lewat agen resmi. Masukkan kode '
+          + 'dari agen Anda di kotak ini, lalu tekan <b>Periksa kode</b>. Kalau benar, '
+          + 'muncul tanda hijau SAH dan form pemesanan terbuka &mdash; panduan ini lanjut sendiri. '
+          + 'Kalau merah, kodenya salah ketik atau sudah tidak berlaku.';
+    } },
   { cari:'#tb-per', judul:'Perorangan atau biro',
     teks:'Pilih Perorangan untuk keluarga atau rombongan pribadi. Biro / Travel hanya '
        + 'untuk biro yang sudah bekerja sama, dan harus memakai kode biro.' },

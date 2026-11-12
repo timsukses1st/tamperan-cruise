@@ -27,7 +27,9 @@
    Jangan pernah menaruh service_role di berkas yang ikut masuk Git.
    =================================================================== */
 
-const PERAN_SAH = ['super', 'owner', 'admin', 'agen', 'boarding', 'menunggu'];
+/* 'owner' dihapus 12 Nov 2026: Owner & Admin dilebur jadi Admin, dan database
+   (profil_role_check) sudah menolak peran itu. */
+const PERAN_SAH = ['super', 'admin', 'agen', 'boarding', 'menunggu'];
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {

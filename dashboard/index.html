@@ -507,8 +507,10 @@ const FU = {belum:['BELUM','p-warn'], dihubungi:['DIHUBUNGI','p-sea'],
             tidak:['TIDAK TERTARIK','p-mute'], jadi:['JADI','p-ok']};
 const JUDUL = {
   super:['Dashboard Super Admin','Semua akses — semua agen, semua pelanggan, bisa mengubah harga & komisi'],
-  owner:['Dashboard Owner','Semua akses jualan dan harga — hanya pengelolaan akun login yang dipegang tim Delta'],
-  admin:['Dashboard Admin','Konfirmasi pembayaran, pembagian kapal, keberangkatan, dan harga jual — tidak melihat komisi agen maupun kontak agen, tidak bisa kelola akses'],
+  /* 12 Nov 2026: Owner dan Admin dilebur jadi Admin (permintaan Kak Mer).
+     Admin = Super Admin tanpa Kelola Akses. Peran 'owner' sudah dihapus dari
+     database (CHECK profil_role_check), jadi tidak ada lagi akun berperan itu. */
+  admin:['Dashboard Admin','Semua akses jualan, uang, harga, dan komisi — kecuali kelola akun login'],
   agen:['Dashboard Agen','Hanya pelanggan & komisi milikmu'],
   boarding:['Petugas Boarding','Tanpa akses ke data penjualan maupun komisi']
 };
@@ -519,16 +521,17 @@ const JUDUL = {
    sebelumnya tersebar di 12 kondisi terpisah, dan begitu peran Owner berubah
    (26 Okt 2026) ada beberapa yang nyaris terlewat.
 
-   Aturannya satu kalimat: Owner bisa semua, kecuali Kelola Akses. */
-const bisaKelola = () => S.peran === 'super' || S.peran === 'owner';   /* jualan & uang */
+   Aturannya satu kalimat: Admin bisa semua, kecuali Kelola Akses.
+   (12 Nov 2026: dulu kalimat ini milik Owner; Owner dan Admin kini satu peran.) */
+const bisaKelola = () => S.peran === 'super' || S.peran === 'admin';   /* jualan & uang */
 const bisaHarga  = () => bisaKelola() || S.peran === 'admin';          /* harga katalog */
 const bisaAkses  = () => S.peran === 'super';                          /* akun login    */
 /* Mencatat uang masuk ikut Admin: dialah yang menerima transfer sehari-hari.
    Sama persis dengan penjagaan di dalam catat_bayar() di database. */
 const bisaBayar  = () => bisaKelola() || S.peran === 'admin';
-/* Memindahkan uang ke deposit dan menetapkan harga nego TIDAK ikut Admin:
-   itu keputusan nilai, bukan pencatatan. Sama dengan penjagaan di dalam
-   buat_pesanan_biro(), porsi_tak_naik_ke_deposit(), dan dp_batal_ke_deposit(). */
+/* Memindahkan uang ke deposit dan menetapkan harga nego: Super Admin & Admin.
+   Sama dengan penjagaan di dalam buat_pesanan_biro(), porsi_tak_naik_ke_deposit(),
+   dan dp_batal_ke_deposit(). */
 const bisaDeposit = () => bisaKelola();
 
 const S = { peran:null, agenId:null, email:null, uid:null, atur:null,
@@ -720,16 +723,13 @@ function menuPeran(peran){
        /* Petugas dermaga cuma butuh satu layar: daftar yang berangkat.
           Dia masuk langsung ke sub-tampilan "Daftar". */
        : peran==='boarding' ? [['berangkat','Keberangkatan']]
-       : peran==='admin'    ? [['pesanan','Pesanan'],['berangkat','Keberangkatan'],
-                               ['atur','Pengaturan']]
        : [['ringkas','Ringkasan'],['pesanan','Pesanan'],['berangkat','Keberangkatan'],
-          /* Biro & Deposit tidak diberikan ke Admin: di tab inilah harga nego
-             ditetapkan dan uang dipindahkan ke deposit. Admin boleh MENCATAT
-             uang masuk (dari tab Pesanan), bukan menetapkan nilainya. */
           ['biro','Biro & Deposit'],
           ['agen','Agen & Kode'],
           ['atur','Pengaturan'],
-          ['akses','Kelola Akses']];
+          /* Kelola Akses hanya untuk Super Admin. Admin mendapat semua tab lain
+             (12 Nov 2026, Owner & Admin dilebur). */
+          ...(peran==='super' ? [['akses','Kelola Akses']] : [])];
 }
 
 /* Sub-tampilan mana yang boleh dilihat peran ini.
@@ -795,6 +795,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-12e', 'Peran Owner dan Admin dilebur jadi Admin: semua akses kecuali Kelola Akses'],
   ['2026-11-12d', 'Tab Komisi agen: agen yang belum punya penjualan lunas kini tertulis tarif 5%, bukan 0%'],
   ['2026-11-12c', 'Mode panduan: simulasi komisi agen Sari, 5% sampai tembus 20 orang lalu 10%'],
   ['2026-11-12b', 'Sisa tulisan NIK dan "nama penumpang diisi belakangan di Manifest" dihapus dari layar'],
@@ -1732,7 +1733,7 @@ function rpcLatihan(nama, arg = {}){
        di dalam tiap kelompok urut nama. Kalau beda, panduan mengajarkan urutan
        yang tidak akan Mas Dik lihat di data sungguhan. */
     daftar_pengguna: () => ((d) => {
-      const bobot = { menunggu:0, super:1, owner:2, admin:3, agen:4 };
+      const bobot = { menunggu:0, super:1, admin:2, agen:3 };
       return d.slice().sort((a,b) =>
         ((bobot[a.peran] ?? 5) - (bobot[b.peran] ?? 5))
         || String(a.nama).localeCompare(String(b.nama), 'id'));
@@ -1788,7 +1789,7 @@ function rpcLatihan(nama, arg = {}){
        tabel audit, dan panduan memang tidak menampilkannya. Yang ditiru cukup
        penolakan perannya, supaya alurnya sama dengan aslinya. */
     catat_audit: () => {
-      if (!['super','owner','admin','agen','boarding'].includes(S.peran))
+      if (!['super','admin','agen','boarding'].includes(S.peran))
         throw { code:'42501', message:'Tidak berhak mencatat audit.' };
       return null;
     },
@@ -1797,7 +1798,7 @@ function rpcLatihan(nama, arg = {}){
        disederhanakan. Mode latihan yang lebih longgar daripada aslinya
        mengajarkan kebiasaan yang nanti ditolak di pekerjaan sungguhan. */
     ubah_tanggal_berangkat: () => {
-      if (!['super','owner','admin'].includes(S.peran))
+      if (!['super','admin'].includes(S.peran))
         throw { code:'42501', message:'Hanya admin atau super admin yang boleh '
                                     + 'memindah tanggal keberangkatan.' };
       const o = P.find(x => x.kode === arg.p_kode);
@@ -1859,12 +1860,12 @@ function rpcLatihan(nama, arg = {}){
        ada panduan. */
     ringkas_bayar: () => {
       const o = P.find(x => x.kode === arg.p_kode);
-      if (!o || !['super','owner','admin'].includes(S.peran)) return [];
+      if (!o || !['super','admin'].includes(S.peran)) return [];
       return [ringkasLat(o)];
     },
 
     ringkas_bayar_banyak: () => {
-      if (!['super','owner','admin'].includes(S.peran)) return [];
+      if (!['super','admin'].includes(S.peran)) return [];
       const pilih = arg.p_kode && arg.p_kode.length
         ? P.filter(o => arg.p_kode.includes(o.kode)) : P;
       /* Kolomnya disebut satu per satu, BUKAN disebar dari ringkasLat().
@@ -1881,7 +1882,7 @@ function rpcLatihan(nama, arg = {}){
        meleset membuat mode panduan memperlihatkan angka kosong padahal data
        sungguhannya benar — susah dilacak karena tidak ada error sama sekali. */
     atur_dp: () => {
-      if (!['super','owner','admin'].includes(S.peran))
+      if (!['super','admin'].includes(S.peran))
         throw { code:'42501', message:'Tidak berwenang mengatur uang muka.' };
       const o = P.find(x => x.kode === arg.p_kode);
       if (!o) throw { code:'22023', message:`Pesanan ${arg.p_kode} tidak ditemukan.` };
@@ -1903,7 +1904,7 @@ function rpcLatihan(nama, arg = {}){
 
     riwayat_bayar: () => {
       const o = P.find(x => x.kode === arg.p_kode);
-      if (!o || !['super','owner','admin'].includes(S.peran)) return [];
+      if (!o || !['super','admin'].includes(S.peran)) return [];
       return (LATIH.pembayaran || [])
         .filter(y => y.pesanan_id === o.id)
         .sort((a,b) => String(a.waktu).localeCompare(String(b.waktu)))
@@ -1912,7 +1913,7 @@ function rpcLatihan(nama, arg = {}){
     },
 
     catat_bayar: () => {
-      if (!['super','owner','admin'].includes(S.peran))
+      if (!['super','admin'].includes(S.peran))
         throw { code:'42501', message:'Hanya Super Admin, Owner, atau Admin yang boleh '
                                     + 'mencatat pembayaran.' };
       if (!['qris_dinamis','qris_statis','va','transfer','tunai'].includes(arg.p_metode))
@@ -1943,12 +1944,12 @@ function rpcLatihan(nama, arg = {}){
     },
 
     saldo_deposit: () => {
-      if (!['super','owner','admin'].includes(S.peran)) return 0;
+      if (!['super','admin'].includes(S.peran)) return 0;
       return saldoLat(arg.p_biro, arg.p_hp);
     },
 
     buat_pesanan_biro: () => {
-      if (!['super','owner'].includes(S.peran))
+      if (!['super','admin'].includes(S.peran))
         throw { code:'42501', message:'Hanya Super Admin atau Owner yang boleh membuat '
                                     + 'pesanan biro dengan harga nego.' };
       const b = (LATIH.biro || []).find(x => x.id === arg.p_biro_id);
@@ -2011,7 +2012,7 @@ function rpcLatihan(nama, arg = {}){
     },
 
     porsi_tak_naik_ke_deposit: () => {
-      if (!['super','owner'].includes(S.peran))
+      if (!['super','admin'].includes(S.peran))
         throw { code:'42501', message:'Hanya Super Admin atau Owner yang boleh memindahkan '
                                     + 'porsi tak terpakai ke deposit.' };
       const o = P.find(x => x.kode === arg.p_kode);
@@ -2059,7 +2060,7 @@ function rpcLatihan(nama, arg = {}){
        setelah porsinya dipindahkan ke deposit. Kalau versi latihan lebih
        longgar, panduan mengajarkan hal yang nanti ditolak saat dipakai. */
     catat_naik: () => {
-      if (!['super','owner','admin','boarding'].includes(S.peran))
+      if (!['super','admin','boarding'].includes(S.peran))
         throw { code:'42501', message:'Peran Anda tidak berhak mencatat boarding.' };
       const o = P.find(x => x.kode === String(arg.p_kode || '').trim());
       if (!o) throw { code:'22023', message:`Pesanan ${arg.p_kode} tidak ditemukan.` };
@@ -2084,7 +2085,7 @@ function rpcLatihan(nama, arg = {}){
     },
 
     dp_batal_ke_deposit: () => {
-      if (!['super','owner'].includes(S.peran))
+      if (!['super','admin'].includes(S.peran))
         throw { code:'42501', message:'Hanya Super Admin atau Owner yang boleh memindahkan '
                                     + 'DP batal ke deposit.' };
       const o = P.find(x => x.kode === arg.p_kode);
@@ -2506,53 +2507,6 @@ const TUTOR = {
       teks:'Itu saja yang paling sering dipakai. Kalau mau mengulang panduan ini, '
          + 'tekan tombol <b>Panduan</b> di kanan atas layar.' },
   ],
-  admin: [
-    { cari:'#judul', judul:'Selamat datang',
-      teks:'Panduan singkat untuk peran Admin. Tugas Anda dua: mengonfirmasi pembayaran, '
-         + 'dan membagi penumpang ke kapal sebelum berangkat.' },
-    { cari:'#navTab', judul:'Lima tab Anda',
-      teks:'Pesanan untuk konfirmasi pembayaran, Pembagian Kapal untuk menempatkan rombongan, '
-         + 'Keberangkatan untuk melihat ringkasannya per tanggal, lalu '
-         + 'Voucher &amp; Add-on dan Pengaturan untuk mengatur harga.' },
-    { tab:'pesanan', cari:'#isi .papan-atas .cari', judul:'Cari pesanan',
-      teks:'Ketik kode pesanan yang disebut pelanggan di chat. Tidak perlu lengkap.' },
-    { tab:'pesanan', cari:'#isi [data-bayar]',
-      judul:'Mencatat uang masuk',
-      teks:'Tombol <b>Catat bayar</b> membuka formulir pencatatan: jumlah uang, cara bayar, dan '
-         + 'referensi transfernya. Jumlahnya terisi sebesar sisa tagihan &mdash; ubah '
-         + 'kalau yang masuk baru DP. Boleh dicatat berkali-kali sampai lunas; begitu '
-         + 'sisanya nol, status pesanan ikut jadi LUNAS sendiri. Semuanya tercatat di '
-         + 'audit atas nama Anda.' },
-    { cari:null, judul:'Yang bukan wewenang Anda',
-      teks:'Anda <b>mencatat</b> uang masuk, tapi tidak <b>menetapkan</b> nilainya: harga '
-         + 'nego pesanan biro dan pemindahan uang ke saldo deposit hanya bisa dilakukan '
-         + 'Super Admin atau Owner. Karena itu tab <b>Biro &amp; Deposit</b> tidak ada di '
-         + 'deretan tab Anda. Harga katalog tetap boleh Anda ubah di Pengaturan.' },
-    { tab:'kapal', cari:'#isi [data-kapal]', judul:'Bagi kapal',
-      teks:'Pilih Kapal 1 atau Kapal 2 lewat dropdown. Perhatikan kartu muatan di atas: '
-         + 'kalau merah, muatannya melebihi kapasitas kapal.' },
-    { tab:'manifest', cari:['#isi .kpi:nth-child(3)','#isi .kpi'], judul:'Periksa sebelum berangkat',
-      teks:'Pastikan "Belum dapat kapal" sudah nol untuk tanggal yang akan berangkat.' },
-    { tab:'voucher', cari:'#isi table[data-papan="tambahan"]', judul:'Harga add-on',
-      teks:'Harga Drone dan Paddleboard bisa Anda ubah dari sini: tekan <b>Ubah</b> di kolom Harga. '
-         + 'Berlaku seketika di halaman pemesanan. Kode voucher di tabel atas <b>bukan</b> wewenang '
-         + 'Anda &mdash; itu tetap Super Admin.' },
-    { tab:'atur', cari:'#isi table[data-papan="produk"]', judul:'Harga jual produk',
-      teks:'Tekan <b>Ubah</b> di baris produk, lalu formulir di bawahnya terisi sendiri. '
-         + 'Menaikkan harga hari ini <b>tidak mengubah tagihan</b> orang yang memesan kemarin &mdash; '
-         + 'tiap pesanan membekukan harganya sendiri saat dibuat.' },
-    { tab:'atur', cari:'#isi .kpi, #isi .card', judul:'Diskon & komisi',
-      teks:'Di kartu paling atas ada diskon konsumen dan tarif komisi agen. '
-         + '<b>Soal komisi:</b> komisi tiap pesanan dikunci saat pesanan itu lunas. Mengubah '
-         + 'tarif di sini <b>tidak mengubah komisi pesanan yang sudah lunas</b> &mdash; tarif baru '
-         + 'hanya berlaku untuk pesanan yang lunas sesudahnya. '
-         + 'Setiap perubahan tercatat di catatan kegiatan atas nama Anda.' },
-    /* cari:null -> kartu di tengah layar. Tombol Panduan ada di bar yang menempel,
-       dan sorotan elemen menempel gampang meleset saat halaman tergulir. */
-    { cari:null, judul:'Selesai',
-      teks:'Itu saja yang paling sering dipakai. Kalau mau mengulang panduan ini, '
-         + 'tekan tombol <b>Panduan</b> di kanan atas layar.' },
-  ],
   agen: [
     { cari:'#judul', judul:'Selamat datang',
       teks:'Panduan singkat untuk peran Agen. Yang terlihat di sini hanya pelanggan yang Anda bawa sendiri.' },
@@ -2601,34 +2555,19 @@ const TUTOR = {
          + 'tekan tombol <b>Panduan</b> di kanan atas layar.' },
   ],
 };
-/* Owner melihat tab yang sama, tapi TIDAK bisa mengubah apa pun. Dulu di sini
-   cuma `TUTOR.owner = TUTOR.super`, dan akibatnya panduan owner menunjuk tombol
-   yang tidak pernah ada untuknya: Lunas, Armada Kapal, Tambah Agen, formulir
-   harga. Mesin tutorial memang MELEWATI sasaran yang tidak ketemu, jadi tidak
-   mogok — tapi diam-diam bolong, dan itu persis keluhan "panduan tidak relevan".
-
-   Sekarang: langkah khusus-super disaring menurut judulnya, lalu disisipkan satu
-   langkah yang menjelaskan kenapa tombolnya tidak ada. Diturunkan dari daftar
-   super supaya langkah baru ikut otomatis; kalau suatu saat ada langkah
-   khusus-super baru yang lupa didaftarkan di sini, uji panduan.mjs yang
-   menangkapnya. */
-/* 26 Okt 2026: Owner TIDAK lagi read-only -- pemilik usaha memakai peran ini.
-   Daftar pengecualiannya dikosongkan, bukan dihapus: kalau suatu saat ada lagi
-   langkah yang khusus Super Admin, tinggal diisi lagi di sini dan uji
-   panduan.mjs akan memeriksa sasarannya. Satu-satunya yang masih khusus Super
-   Admin sekarang adalah Kelola Akses, dan langkah panduannya memang hanya
-   menunjuk tabel penggunanya -- yang Owner tetap boleh LIHAT. */
-const OWNER_LEWAT = new Set([]);
-TUTOR.owner = (() => {
-  const daftar = TUTOR.super.filter(l => !OWNER_LEWAT.has(l.judul));
+/* PANDUAN ADMIN (12 Nov 2026): Owner dan Admin dilebur jadi Admin.
+   Diturunkan dari panduan Super Admin supaya langkah baru ikut otomatis;
+   yang dibuang hanya langkah di tab Kelola Akses, karena tab itu tidak ada
+   di menu Admin. Satu langkah disisipkan untuk menjelaskan kenapa. */
+TUTOR.admin = (() => {
+  const daftar = TUTOR.super.filter(l => l.tab !== 'akses');
   const i = daftar.findIndex(l => l.judul === 'Deretan tab');
   daftar.splice(i + 1, 0, {
     cari: null, judul: 'Satu yang bukan wewenang Anda',
-    teks: 'Peran Owner membuka <b>semua</b> &mdash; pesanan, harga, komisi, agen, kapal, '
-        + 'voucher. Satu-satunya yang tidak: <b>membuat, menghapus, dan mengubah peran '
-        + 'akun login</b>. Itu dipegang tim Delta, supaya urusan akses sistem terpisah '
-        + 'dari urusan jualan. Daftar penggunanya tetap bisa Anda lihat di Kelola Akses, '
-        + 'hanya tombolnya yang tidak ada.' });
+    teks: 'Peran Admin membuka <b>semua</b> &mdash; pesanan, pembayaran, harga, komisi, agen, '
+        + 'biro &amp; deposit, kapal, dan voucher. Satu-satunya yang tidak: <b>Kelola Akses</b>, '
+        + 'yaitu membuat, menghapus, dan mengubah peran akun login. Itu dipegang Super Admin, '
+        + 'supaya urusan akses sistem terpisah dari urusan jualan.' });
   return daftar;
 })();
 
@@ -3065,7 +3004,7 @@ async function tabPesanan(){
             <th class="nw">Status</th><th class="num">Total</th>${
             /* Admin tidak melihat komisi — sama dengan kolom Nilai di layar
                Keberangkatan, dan sama dengan penjagaan di database. */
-            S.peran==='admin' ? '' : '<th class="num">Komisi agen</th>'}</tr></thead><tbody>
+            '<th class="num">Komisi agen</th>'}</tr></thead><tbody>
         ${data.map(o=>{
           const st = STATUS[o.status]||[o.status,'p-mute'];
           return `<tr>
@@ -3090,7 +3029,7 @@ async function tabPesanan(){
             <td class="nw"><span class="sel2" style="flex-wrap:wrap"><span class="pill ${st[1]}">${st[0]}</span>${
               aksiStatus(o)}</span></td>
             <td class="num nw" data-urut="${o.total}">${rp(o.total)}${selBayar(o, bayarPeta[o.kode])}</td>${
-            S.peran==='admin' ? '' : `<td class="num nw" data-urut="${o.komisi_nominal||0}">${
+            `<td class="num nw" data-urut="${o.komisi_nominal||0}">${
               o.komisi_nominal == null
                 ? `<span style="color:var(--muted)">&mdash;</span>`
                 : `${rp(o.komisi_nominal)}<div class="hint">${
@@ -3102,7 +3041,7 @@ async function tabPesanan(){
             sampai tabelnya digeser. 11 Nov 2026 Mas Dik bertanya "mana kolom
             komisi agen?" — kolomnya ADA, cuma tidak kelihatan. Fitur yang
             tidak bisa ditemukan sama saja dengan fitur yang tidak ada. */''}
-      ${S.peran==='admin' ? '' : `<div class="hint" style="margin-top:7px">
+      ${`<div class="hint" style="margin-top:7px">
         &harr; Geser tabel ke kanan untuk melihat kolom <b>Total</b> dan
         <b>Komisi agen</b>.</div>`}
     </div>`;
@@ -3136,7 +3075,7 @@ async function tabPesanan(){
    ketinggalan saat peran Owner diperluas, jadi tombol Lunas dan Batal tidak
    pernah tergambar untuk Owner padahal database menerimanya. Ditemukan saat
    memasang lapisan DP, bukan oleh laporan dari lapangan. */
-const BOLEH_UBAH_STATUS = ['super','owner','admin'];
+const BOLEH_UBAH_STATUS = ['super','admin'];
 
 /* ---- Sel rincian uang di kolom Total ----
    Ditempel di bawah angka total, BUKAN jadi kolom baru: tabel Pesanan sudah
@@ -5315,7 +5254,7 @@ function selWaAgen(a, wa){
   if (!wa){
     /* Peran agen memang tidak boleh melihat nomor agen lain — bedakan "tidak
        berhak lihat" dari "memang belum diisi", supaya tidak menyesatkan. */
-    if (!bisaUbah && S.peran !== 'owner')
+    if (!bisaUbah)
       return '<span style="color:var(--muted);font-size:12px">— tidak terlihat di peran ini</span>';
     return `<span class="sel2"><span class="pill p-warn">BELUM DIISI</span>${
       bisaUbah ? `<a class="aksi ghost" href="#" data-ubah-wa="${a.id}" data-wa=""
@@ -5462,7 +5401,7 @@ async function tabBerangkat(){
       <div class="kpi"><div class="k">Belum dapat kapal</div>
         <div class="v" style="color:${tot.belum?'var(--warn)':'var(--ok)'}">${tot.belum}</div>
         <div class="d">pesanan</div></div>
-      ${S.peran==='admin' ? '' : `<div class="kpi"><div class="k">Nilai</div>
+      ${`<div class="kpi"><div class="k">Nilai</div>
         <div class="v">${rp(tot.omzet)}</div><div class="d">semua tanggal</div></div>`}
     </div>
     <div class="card scrollx">
@@ -5474,7 +5413,7 @@ async function tabBerangkat(){
         <thead><tr><th class="nw">Tanggal</th><th class="nw">Pelayaran</th>
           <th class="num">Pesanan</th><th class="num">Orang</th><th class="num">Anak</th>
           <th class="num">Belum berkapal</th>
-          ${S.peran==='admin' ? '' : '<th class="num">Nilai</th>'}</tr></thead>
+          ${'<th class="num">Nilai</th>'}</tr></thead>
         <tbody>${baris.length ? baris.map(b=>`<tr data-mf-tgl="${esc(b.tanggal)}"
           style="cursor:pointer" title="Lihat daftar orang yang berangkat tanggal ini">
           <td class="nw"><b>${tglPanjang(b.tanggal)}</b>
@@ -5485,7 +5424,7 @@ async function tabBerangkat(){
           <td class="num">${b.jml_anak || '—'}</td>
           <td class="num">${b.belum_kapal
             ? `<span class="pill p-warn">${b.belum_kapal}</span>` : '<span class="pill p-ok">0</span>'}</td>
-          ${S.peran==='admin' ? '' : `<td class="num nw">${rp(b.omzet)}</td>`}
+          ${`<td class="num nw">${rp(b.omzet)}</td>`}
         </tr>`).join('') : `<tr><td colspan="7"><div class="hint">
           Belum ada pesanan yang punya tanggal keberangkatan.</div></td></tr>`}</tbody>
       </table>
@@ -5995,8 +5934,7 @@ const PERAN_LABEL = {
      karena daftar_pengguna() juga mengurutkannya paling atas. */
   menunggu:['Menunggu Akses','Sudah daftar, belum diberi peran'],
   super:   ['Super Admin','Semua akses, pemegang master'],
-  owner:   ['Owner','Semua kecuali kelola akses'],
-  admin:   ['Admin','Konfirmasi bayar, bagi kapal, atur harga'],
+  admin:   ['Admin','Semua kecuali kelola akses'],
   agen:    ['Agen','Hanya pelanggan & komisi sendiri'],
   boarding:['Petugas Boarding','Hanya daftar boarding']
 };
@@ -7285,7 +7223,7 @@ async function tabBoarding(){
   const baris = data || [];
   const hariIni = new Date().toISOString().slice(0,10);
   const hariIniBaris = baris.filter(o => o.tanggal_berangkat === hariIni);
-  const bisaCatat = ['super','owner','admin','boarding'].includes(S.peran);
+  const bisaCatat = ['super','admin','boarding'].includes(S.peran);
 
   $('isi').innerHTML = `
     <div class="grid g4">

@@ -795,6 +795,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-12c', 'Mode panduan: simulasi komisi agen Sari, 5% sampai tembus 20 orang lalu 10%'],
   ['2026-11-12b', 'Sisa tulisan NIK dan "nama penumpang diisi belakangan di Manifest" dihapus dari layar'],
   ['2026-11-12a', 'Tulisan komisi disesuaikan aturan Pak Dika: tarif dikunci saat pesanan lunas, pesanan lama tidak ikut naik'],
   ['2026-11-11i', 'Keterangan komisi ikut berubah saat pilihannya diganti; kolom Komisi agen diberi penunjuk geser'],
@@ -1323,6 +1324,55 @@ function dataLatihan(){
         kode_voucher_beku:null, pemesan_nama:'Rombongan SMPN 2', pemesan_hp:'081200000014',
         agen_id:AG.budi, produk:pr('2 Day Journey'), agen:{nama:'Budi Santoso'}, kapal:null,
         jml_naik:0 },
+      /* --- SIMULASI KOMISI 5% -> 10% (12 Nov 2026, permintaan Kak Mer) ---
+         Supaya tab Komisi agen Sari bisa dipakai menjelaskan aturan Pak Dika
+         ke tim. Urutan lunas Sari bulan ini (diurutkan menurut `dibuat`):
+           LAT04  3 orang -> hitungan  3 -> 5%
+           LAT19  8 orang -> hitungan 11 -> 5%
+           LAT20  6 orang -> hitungan 17 -> 5%
+           LAT21  5 orang -> hitungan 22 -> TEMBUS 20 -> 10% seluruh pesanan
+           LAT22  2 orang -> hitungan 24 -> 10%
+         LAT04-20 tetap 5% walau Sari akhirnya tembus — itulah yang mau
+         diperlihatkan. Semua berangkat di Kapal 1 (kapasitas 40) pada tanggal
+         yang belum dipakai pesanan lain, jadi kartu muatan merah Kapal 2 di o3
+         dan contoh lain tidak berubah. Tiap baris punya pembayaran di
+         `pembayaran` supaya tidak ikut jadi "pesanan warisan" seperti o17. */
+      { id:'o19', kode:'TTC-LAT19', tipe:'perorangan', pax:8, anak:0, total:3724000,
+        subtotal:3920000, diskon_nominal:196000, tambahan_nominal:0,
+        harga_satuan_beku:490000, deposit_jam:null, deposit_sebab:null,
+        status:'paid', fu_status:'jadi', fu_terakhir:null,
+        dibuat:JAM(24), diubah:JAM(23), tanggal_berangkat:HARI(6), kapal_id:K1,
+        kode_voucher_beku:null, pemesan_nama:'Keluarga Wibowo', pemesan_hp:'081200000019',
+        pemesan_alamat:'Jl. Gatot Subroto No. 5, Kel. Pucangsewu, Kec. Pacitan, Kab. Pacitan, Jawa Timur',
+        agen_id:AG.sari, produk:pr('1 Day Journey'), agen:{nama:'Sari Wulandari'},
+        kapal:{nama:'Kapal 1'}, jml_naik:0 },
+      { id:'o20', kode:'TTC-LAT20', tipe:'perorangan', pax:6, anak:0, total:855000,
+        subtotal:900000, diskon_nominal:45000, tambahan_nominal:0,
+        harga_satuan_beku:150000, deposit_jam:null, deposit_sebab:null,
+        status:'paid', fu_status:'jadi', fu_terakhir:null,
+        dibuat:JAM(20), diubah:JAM(19), tanggal_berangkat:HARI(6), kapal_id:K1,
+        kode_voucher_beku:null, pemesan_nama:'Dimas Aditya', pemesan_hp:'081200000020',
+        pemesan_alamat:'Jl. Veteran No. 21, Kel. Sirnoboyo, Kec. Pacitan, Kab. Pacitan, Jawa Timur',
+        agen_id:AG.sari, produk:pr('Cruise Daily'), agen:{nama:'Sari Wulandari'},
+        kapal:{nama:'Kapal 1'}, jml_naik:0 },
+      { id:'o21', kode:'TTC-LAT21', tipe:'perorangan', pax:5, anak:0, total:3705000,
+        subtotal:3900000, diskon_nominal:195000, tambahan_nominal:0,
+        harga_satuan_beku:780000, deposit_jam:null, deposit_sebab:null,
+        status:'paid', fu_status:'jadi', fu_terakhir:null,
+        dibuat:JAM(14), diubah:JAM(13), tanggal_berangkat:HARI(7), kapal_id:K1,
+        kode_voucher_beku:null, pemesan_nama:'Ayu Kartika', pemesan_hp:'081200000021',
+        pemesan_alamat:'Jl. Mayjend Sutoyo No. 9, Kel. Tanjungsari, Kec. Pacitan, Kab. Pacitan, Jawa Timur',
+        agen_id:AG.sari, produk:pr('2 Day Journey'), agen:{nama:'Sari Wulandari'},
+        kapal:{nama:'Kapal 1'}, jml_naik:0 },
+      { id:'o22', kode:'TTC-LAT22', tipe:'perorangan', pax:2, anak:0, total:285000,
+        subtotal:300000, diskon_nominal:15000, tambahan_nominal:0,
+        harga_satuan_beku:150000, deposit_jam:null, deposit_sebab:null,
+        status:'paid', fu_status:'jadi', fu_terakhir:null,
+        dibuat:JAM(7), diubah:JAM(6), tanggal_berangkat:HARI(8), kapal_id:K1,
+        kode_voucher_beku:null, pemesan_nama:'Reza Firmansyah', pemesan_hp:'081200000022',
+        pemesan_alamat:'Jl. Dr. Wahidin No. 3, Kel. Sidoharjo, Kec. Pacitan, Kab. Pacitan, Jawa Timur',
+        agen_id:AG.sari, produk:pr('Cruise PROMO'), agen:{nama:'Sari Wulandari'},
+        kapal:{nama:'Kapal 1'}, jml_naik:0 },
     ],
     kapal: [
       { id:K1, nama:'Kapal 1', kapasitas:40, aktif:true, urutan:1 },
@@ -1462,6 +1512,18 @@ function dataLatihan(){
       { id:'y6', pesanan_id:'o16', metode:'transfer', nominal_diterima:3000000,
         referensi:'BRI 1102', catatan:'DP rombongan', waktu:JAM(58),
         diverifikasi_jam:JAM(58), oleh:'Dika Kurniawan' },
+      { id:'y8', pesanan_id:'o19', metode:'transfer', nominal_diterima:3724000,
+        referensi:'BCA 5119', catatan:'Simulasi komisi', waktu:JAM(23),
+        diverifikasi_jam:JAM(23), oleh:'Uun Staf COO' },
+      { id:'y9', pesanan_id:'o20', metode:'transfer', nominal_diterima:855000,
+        referensi:'BCA 5120', catatan:'Simulasi komisi', waktu:JAM(19),
+        diverifikasi_jam:JAM(19), oleh:'Uun Staf COO' },
+      { id:'y10', pesanan_id:'o21', metode:'transfer', nominal_diterima:3705000,
+        referensi:'BCA 5121', catatan:'Simulasi komisi', waktu:JAM(13),
+        diverifikasi_jam:JAM(13), oleh:'Uun Staf COO' },
+      { id:'y11', pesanan_id:'o22', metode:'transfer', nominal_diterima:285000,
+        referensi:'BCA 5122', catatan:'Simulasi komisi', waktu:JAM(6),
+        diverifikasi_jam:JAM(6), oleh:'Uun Staf COO' },
       /* o17 SENGAJA tidak punya baris di sini: itulah intinya — statusnya lunas
          tapi pembukuannya kosong. */
       { id:'y7', pesanan_id:'o18', metode:'transfer', nominal_diterima:2000000,

@@ -795,6 +795,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-12a', 'Tulisan komisi disesuaikan aturan Pak Dika: tarif dikunci saat pesanan lunas, pesanan lama tidak ikut naik'],
   ['2026-11-11i', 'Keterangan komisi ikut berubah saat pilihannya diganti; kolom Komisi agen diberi penunjuk geser'],
   ['2026-11-11h', 'Sisa kolom NIK dibersihkan dari Manifest; setelan mati "Hitungan tiket mulai nol lagi" dihapus'],
   ['2026-11-11g', 'Manifest & Per tanggal dilebur jadi satu layar bertingkat: klik tanggalnya untuk melihat daftar orangnya'],
@@ -2478,9 +2479,9 @@ const TUTOR = {
          + 'tiap pesanan membekukan harganya sendiri saat dibuat.' },
     { tab:'atur', cari:'#isi .kpi, #isi .card', judul:'Diskon & komisi',
       teks:'Di kartu paling atas ada diskon konsumen dan tarif komisi agen. '
-         + '<b>Hati-hati dengan komisi:</b> tarif baru ikut mengubah tiket yang <b>sudah '
-         + 'terjual</b>, jadi mengubahnya '
-         + 'di tengah bulan ikut mengubah bayaran seluruh tiket bulan itu. '
+         + '<b>Soal komisi:</b> komisi tiap pesanan dikunci saat pesanan itu lunas. Mengubah '
+         + 'tarif di sini <b>tidak mengubah komisi pesanan yang sudah lunas</b> &mdash; tarif baru '
+         + 'hanya berlaku untuk pesanan yang lunas sesudahnya. '
          + 'Setiap perubahan tercatat di catatan kegiatan atas nama Anda.' },
     /* cari:null -> kartu di tengah layar. Tombol Panduan ada di bar yang menempel,
        dan sorotan elemen menempel gampang meleset saat halaman tergulir. */
@@ -2888,24 +2889,31 @@ async function tabRingkas(){
         ${L.length ? L.slice(0,3).map((a,i)=>`
           <div class="rank r${i+1}"><div class="no">${i+1}</div>
             <div style="flex:1"><div style="font-weight:600;font-size:14px">${esc(a.nama)}</div>
-              <div style="font-size:11.5px;color:var(--muted)">${a.tiket} tiket · tarif ${a.tarif}%</div></div>
+              <div style="font-size:11.5px;color:var(--muted)">${a.tiket} tiket · tarif sekarang ${a.tarif}%</div></div>
             <div class="num"><div style="font-weight:700">${rp(a.omzet)}</div>
               <div style="font-size:11.5px;color:var(--muted)">komisi ${rp(a.komisi)}</div></div>
           </div>`).join('') : '<div class="hint">Belum ada penjualan lunas.</div>'}
-        ${amb && ats ? `<div class="note w"><b>Komisi bisa melompat gara-gara satu tiket</b>
-          Agen jual <b>${amb - 1} tiket</b> bulan ini &rarr; komisinya <b>${bwh}%</b> per tiket.<br>
-          Jual <b>1 lagi</b> (jadi ${amb} tiket) &rarr; tarifnya naik jadi <b>${ats}%</b> &mdash;
-          dan ${ats}% itu dihitung ulang untuk <b>semua ${amb} tiket</b>, bukan cuma tiket ke-${amb}.
+        ${amb && ats ? `<div class="note w"><b>Komisi dikunci per pesanan, saat pesanan lunas</b>
+          <!-- 12 Nov 2026: dulu kotak ini menulis tarif atas "dihitung ulang untuk
+               semua tiket". Itu aturan LAMA. Sejak 11 Nov komisi dikunci oleh
+               kunci_komisi() di database saat pesanan lunas dan tidak pernah
+               dihitung ulang. "tarif sekarang" di leaderboard = tarif untuk
+               pesanan lunas BERIKUTNYA, bukan tarif semua pesanannya. -->
+          Selama agen belum sampai ${amb} orang bulan ini, pesanannya yang lunas dapat
+          <b>${bwh}%</b>. Pesanan yang membuat hitungannya <b>tembus ${amb} orang</b>
+          dapat <b>${ats}%</b> untuk seluruh isi pesanan itu, tidak dipecah.
           <br><br>
-          Jadi kalau angka komisi di sini tiba-tiba naik banyak padahal penjualannya
-          cuma nambah sedikit, kemungkinan besar ada agen yang baru saja tembus
-          ${amb} tiket. Itu normal, bukan salah hitung.
+          Pesanan yang <b>sudah lunas sebelumnya tetap ${bwh}%</b> &mdash; tidak ikut naik
+          walau agennya kemudian tembus ${amb} orang. Jadi "tarif sekarang" di daftar
+          atas adalah tarif untuk pesanan lunas <b>berikutnya</b>, bukan tarif semua
+          pesanan agen itu. Rincian per pesanan ada di kolom Komisi tab Pesanan.
           <br><br>
           <b>Yang dihitung jumlah ORANG sebulan, bukan jumlah pesanan.</b>
           ${amb} pesanan @1 orang dan <b>1 pesanan rombongan ${amb} orang</b> sama-sama
           dihitung ${amb} tiket &mdash; jadi satu biro bisa langsung dapat tarif ${ats}%
-          di pesanan pertamanya. Yang dihitung cuma pesanan yang <b>sudah lunas</b>;
-          yang masih belum bayar belum menambah hitungan.</div>`
+          di pesanan pertamanya. Yang dihitung cuma pesanan yang <b>sudah lunas</b>,
+          diurutkan menurut kapan lunasnya. Hitungan mulai dari nol lagi tiap awal
+          bulan, dan pesanan yang dibatalkan komisinya dicabut.</div>`
         : ''}
       </div>
       <div class="card"><h3>Penjualan per Produk
@@ -6745,8 +6753,9 @@ async function tabAtur(){
         + `Sekarang ${disk2}% &mdash; tiket ${rp(hrg)} dibayar `
         + `${rp(Math.round(hrg * (100 - disk2) / 100))}.`)}
       ${f('ambang_tier','Tiket untuk naik komisi',
-        adaAmb ? `Sekarang <b>${amb} tiket</b> per periode. Di bawah itu tarifnya `
-                 + `${bwh}%, mulai tiket ke-${amb} naik jadi ${ats}%.`
+        adaAmb ? `Sekarang <b>${amb} tiket</b> per bulan. Di bawah itu tarifnya `
+                 + `${bwh}%. Pesanan yang membuat hitungan agen tembus ${amb} tiket, dan `
+                 + `pesanan sesudahnya, dapat ${ats}%.`
                : 'Isi jumlah tiket yang membuat tarif komisi agen naik.')}
       ${f('komisi_bawah_persen',
         adaAmb ? `Tarif komisi di bawah ${amb} tiket (%)` : 'Tarif komisi sebelum tembus (%)',
@@ -6755,10 +6764,10 @@ async function tabAtur(){
                : 'Dipakai selama tiket agen masih di bawah ambang.')}
       ${f('komisi_atas_persen',
         adaAmb ? `Tarif komisi ${amb} tiket ke atas (%)` : 'Tarif komisi sesudah tembus (%)',
-        adaAmb ? `Agen dengan ${amb} tiket @${rp(hrg)} &rarr; komisi `
-                 + `<b>${rp(nilai(amb, ats))}</b> &mdash; tarif ini berlaku untuk `
-                 + `SELURUH ${amb} tiket, bukan hanya yang ke-${amb}.`
-               : 'Begitu tembus, tarif ini berlaku untuk SELURUH tiket periode itu.')}`;
+        adaAmb ? `Pesanan yang membuat hitungan agen tembus ${amb} tiket dapat ${ats}% `
+                 + `untuk <b>seluruh isi pesanan itu</b>, tidak dipecah. Pesanan yang sudah `
+                 + `lunas sebelumnya <b>tetap ${bwh}%</b>, tidak ikut naik.`
+               : 'Berlaku untuk pesanan yang lunas sesudah agen tembus batas. Pesanan sebelumnya tidak ikut naik.')}`;
       })()}
       ${/* Keterangan di bawah pilihan ini IKUT BERUBAH seketika saat
             pilihannya diganti — lihat pasangKomisiDari() di bawah. Sebelum
@@ -7107,26 +7116,30 @@ async function tabKomisi(){
           ? 'p-ok' : 'p-warn'}">TARIF ${saya.tarif}%</span></div>
       ${ambang ? `<div class="prog"><i style="width:${
         Math.min(100, saya.tiket / ambang * 100)}%"></i></div>` : ''}
-      <div style="font-size:12.5px;color:var(--muted)">Tarif ini dipakai untuk seluruh
-        ${saya.tiket} tiket Anda &mdash; termasuk yang sudah terjual sebelum batas tercapai.
+      <div style="font-size:12.5px;color:var(--muted)">Tarif ini berlaku untuk pesanan Anda
+        yang lunas <b>berikutnya</b>. Pesanan yang sudah lunas tetap memakai tarif saat ia
+        lunas &mdash; lihat kolom Komisi di tabel Pelanggan Saya.
         ${ambang && sisa ? ` Kurang <b>${sisa} tiket</b> lagi menuju tarif
           ${aturTier.r_atas ? Number(aturTier.r_atas) + '%' : 'lebih tinggi'}.` : ''}
         ${!ambang ? ' <b>Batas tiket belum terbaca</b> — grafiknya disembunyikan '
           + 'daripada menampilkan angka yang belum tentu benar.' : ''}</div>
     </div>
     <div class="grid g4">
-      <div class="kpi"><div class="k">Komisi Berjalan</div><div class="v">${rp(saya.komisi)}</div>
-        <div class="d">belum final, bisa berubah</div></div>
+      <div class="kpi"><div class="k">Komisi Bulan Ini</div><div class="v">${rp(saya.komisi)}</div>
+        <div class="d">dari pesanan lunas, sudah terkunci</div></div>
       <div class="kpi"><div class="k">Tarif Saat Ini</div><div class="v">${saya.tarif}%</div>
-        <div class="d">dipakai untuk semua tiket Anda</div></div>
+        <div class="d">untuk pesanan lunas berikutnya</div></div>
       <div class="kpi"><div class="k">Tiket Terjual</div><div class="v">${saya.tiket}</div>
         <div class="d">penjualan ${rp(saya.omzet)}</div></div>
       <div class="kpi"><div class="k">Peringkat</div><div class="v">${pos||'—'}</div>
         <div class="d">dari ${L.length} agen</div></div>
     </div>
-    <div class="note w"><b>Kenapa ditulis "berjalan", bukan angka final</b>
-      Begitu jumlah tiketnya tembus batas, tiket yang sudah terjual pun ikut naik tarifnya.
-      Jadi angkanya berubah selama bulan ini masih jalan, dan baru dikunci saat komisi dibayarkan.</div>
+    <div class="note w"><b>Komisi dikunci begitu pesanan lunas</b>
+      Saat pesanan Anda lunas, komisinya langsung dihitung dengan tarif Anda saat itu
+      dan <b>tidak berubah lagi</b>. Kalau nanti Anda tembus ${ambang ? ambang + ' orang' : 'batasnya'},
+      tarif yang lebih tinggi hanya berlaku untuk pesanan yang lunas sesudahnya &mdash;
+      pesanan sebelumnya tidak ikut naik. Komisi sebuah pesanan baru hilang kalau
+      pesanannya dibatalkan.</div>
     <div class="card"><h3>Top Penjualan</h3>
       ${L.map((a,i)=>{
         const aku=a.agen_id===S.agenId;
@@ -7134,7 +7147,7 @@ async function tabKomisi(){
           <div class="no">${i+1}</div>
           <div style="flex:1"><div style="font-weight:600;font-size:14px">${esc(a.nama)}
             ${aku?'<span class="pill p-sea">KAMU</span>':''}</div>
-            <div style="font-size:11.5px;color:var(--muted)">${a.tiket} tiket · tarif ${a.tarif}%</div></div>
+            <div style="font-size:11.5px;color:var(--muted)">${a.tiket} tiket · tarif sekarang ${a.tarif}%</div></div>
           <div class="num"><div style="font-weight:700">${rp(a.omzet)}</div>
             <div style="font-size:11.5px;color:var(--muted)">komisi ${rp(a.komisi)}</div></div></div>`;
       }).join('')}

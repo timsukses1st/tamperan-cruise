@@ -796,6 +796,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-12j', 'Ekspor Data: berkas Excel dirapikan (judul, format rupiah & tanggal, warna status, baris total, jarak sel, siap cetak)'],
   ['2026-11-12i', 'Ekspor Data: kotak centang rata kiri, tidak lagi terdorong ke tengah'],
   ['2026-11-12h', 'Tab baru Ekspor Data: rekap bulanan ke Excel (ringkasan, pesanan, pembayaran, komisi agen, keberangkatan)'],
   ['2026-11-12g', 'Kolom Dipesan (tanggal pesanan dibuat) di Daftar boarding, Pembagian kapal, dan Manifest'],
@@ -4685,9 +4686,24 @@ async function tabManifest(){
    Angka disimpan sebagai angka (bukan teks "Rp…"), supaya bisa langsung
    dijumlah di Excel.
 
-   Pustaka SheetJS (gratis, Apache-2.0) baru diunduh SAAT tombol ditekan,
+   Pustaka Excel (ExcelJS, gratis) baru diunduh SAAT tombol ditekan,
    jadi dashboard tidak bertambah berat untuk orang yang tidak mengekspor. */
-const XLSX_URL = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs';
+/* ExcelJS (MIT, gratis) — dipakai sejak 12 Nov 2026 menggantikan SheetJS.
+   SheetJS versi gratis TIDAK bisa menulis gaya (huruf tebal, warna, bingkai),
+   jadi berkasnya tampil seperti data mentah. ExcelJS bisa, dan tetap baru
+   diunduh saat tombol ditekan. Dimuat sebagai <script> (versi UMD), bukan
+   import(), karena versi ESM-nya tidak disediakan resmi. */
+const EXCELJS_URL = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+function muatExcelJS(){
+  if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
+  return new Promise((ok, gagal) => {
+    const sc = document.createElement('script');
+    sc.src = EXCELJS_URL;
+    sc.onload = () => window.ExcelJS ? ok(window.ExcelJS) : gagal(new Error('Pustaka Excel gagal dimuat.'));
+    sc.onerror = () => gagal(new Error('Pustaka Excel gagal dimuat. Periksa koneksi internet lalu coba lagi.'));
+    document.head.appendChild(sc);
+  });
+}
 const SHEET_EKSPOR = [
   ['ringkasan', 'Ringkasan',      'Angka pokok bulan itu dalam satu halaman'],
   ['pesanan',   'Pesanan',        'Semua pesanan yang DIBUAT di bulan itu, semua status, lengkap dengan pembayaran dan komisinya'],
@@ -4751,204 +4767,370 @@ async function ambilSemuaBaris(buatKueri){
   }
 }
 
-const jamWib = s => {
-  if (!s) return '';
-  const d = new Date(s);
-  if (isNaN(d)) return String(s);
-  const w = new Date(d.getTime() + 7 * 3600e3);          /* tampil sebagai WIB */
-  return w.toISOString().slice(0,16).replace('T',' ');
-};
 const labelStatus = st => (STATUS[st] || [st])[0];
+
+/* ---------------------------------------------------------------------
+   TAHAP 1 — kumpulkan data jadi "isi" (data polos, tanpa gaya).
+   Dipisah dari tahap 2 supaya bisa diuji tanpa pustaka Excel: hasilnya
+   JSON biasa. Tanggal disimpan sebagai teks ISO; tahap 2 yang mengubahnya
+   jadi tanggal Excel sungguhan.
+   Jenis kolom: teks | hp | rp | angka | persen | tgl | jam | status
+   --------------------------------------------------------------------- */
+async function siapkanIsiEkspor(periode, pilih, lapor){
+  const bts = batasBulanWib(periode);
+  const tglMulai = periode ? `${periode}-01` : null;
+  const tglSampai = periode ? (() => {
+    const [th, bl] = periode.split('-').map(Number);
+    return bl === 12 ? `${th + 1}-01-01` : `${th}-${String(bl + 1).padStart(2,'0')}-01`;
+  })() : null;
+
+  lapor('Mengambil pesanan…');
+  const KOLOM_PESANAN = 'id,kode,tipe,pax,anak,status,dibuat,tanggal_berangkat,'
+    + 'pemesan_nama,pemesan_hp,pemesan_alamat,biro_nama,harga_satuan_beku,subtotal,'
+    + 'diskon_nominal,tambahan_nominal,total,kode_voucher_beku,jml_naik,'
+    + 'komisi_persen,komisi_nominal,komisi_tiket_kumulatif,'
+    + 'produk(nama),agen(nama),kapal(nama)';
+  const pesanan = await ambilSemuaBaris(() => {
+    let q = DB.from('pesanan').select(KOLOM_PESANAN);
+    if (bts) q = q.gte('dibuat', bts.mulai).lt('dibuat', bts.sampai);
+    return q.order('dibuat');
+  });
+  const [{ data: rb }, { data: papan }, { data: setel }] = await Promise.all([
+    DB.rpc('ringkas_bayar_banyak', { p_kode: null }),
+    DB.rpc('papan_peringkat', { p_periode: periode || null }),
+    DB.from('pengaturan').select('kolom_manifest').single(),
+  ]);
+  const bayarPer = Object.fromEntries((rb || []).map(r => [r.r_kode, r]));
+
+  let bayar = [];
+  if (pilih.bayar || pilih.ringkasan){
+    lapor('Mengambil pembayaran…');
+    bayar = await ambilSemuaBaris(() => {
+      let q = DB.from('pembayaran')
+        .select('pesanan_id,metode,nominal_ditagih,nominal_diterima,referensi,waktu,diverifikasi_jam,catatan');
+      if (bts) q = q.gte('waktu', bts.mulai).lt('waktu', bts.sampai);
+      return q.order('waktu');
+    });
+  }
+  let berangkat = [];
+  if (pilih.berangkat || pilih.ringkasan){
+    lapor('Mengambil keberangkatan…');
+    berangkat = (await ambilSemuaBaris(() => {
+      let q = DB.from('pesanan').select(KOLOM_PESANAN).in('status', ['waiting','paid','boarded']);
+      if (tglMulai) q = q.gte('tanggal_berangkat', tglMulai).lt('tanggal_berangkat', tglSampai);
+      return q.order('tanggal_berangkat');
+    })).filter(o => o.tanggal_berangkat);
+  }
+
+  const LUNAS = ['paid','boarded'];
+  const lunas = pesanan.filter(o => LUNAS.includes(o.status));
+  const jml = (arr, k) => arr.reduce((a, o) => a + (Number(o[k]) || 0), 0);
+  const isi = { periode: namaPeriode(periode), dibuat: new Date().toISOString(),
+                latihan: !!S.latihan, ringkasan: null, sheet: [] };
+
+  if (pilih.ringkasan){
+    isi.ringkasan = [
+      ['Berdasarkan tanggal pesanan dibuat', null],
+      ['Pesanan masuk (semua status)', pesanan.length, 'angka'],
+      ['Pesanan lunas', lunas.length, 'angka'],
+      ['Orang dari pesanan lunas', jml(lunas, 'pax'), 'angka'],
+      ['Penjualan lunas', jml(lunas, 'total'), 'rp'],
+      ['Komisi agen', jml(papan || [], 'komisi'), 'rp'],
+      ['Belum bayar', pesanan.filter(o => o.status === 'pending').length, 'angka'],
+      ['Perlu cek pembayaran', pesanan.filter(o => o.status === 'waiting').length, 'angka'],
+      ['Batal', pesanan.filter(o => String(o.status).startsWith('cancel')).length, 'angka'],
+      ['Berdasarkan tanggal uang diterima', null],
+      ['Jumlah pembayaran', bayar.length, 'angka'],
+      ['Uang diterima', jml(bayar, 'nominal_diterima'), 'rp'],
+      ['Berdasarkan tanggal berangkat', null],
+      ['Rombongan berangkat', berangkat.length, 'angka'],
+      ['Orang berangkat', jml(berangkat, 'pax'), 'angka'],
+      ['Sudah tercatat naik', jml(berangkat, 'jml_naik'), 'angka'],
+    ];
+  }
+
+  if (pilih.pesanan) isi.sheet.push({
+    nama: 'Pesanan', judul: 'Daftar Pesanan',
+    ket: 'Semua pesanan yang dibuat di periode ini, semua status. Dasar tanggal: tanggal pesanan dibuat.',
+    beku: 1,
+    kolom: [
+      { h:'Kode', t:'teks', w:13 }, { h:'Dibuat', t:'jam', w:17 }, { h:'Berangkat', t:'tgl', w:13 },
+      { h:'Tipe', t:'teks', w:11 }, { h:'Pemesan', t:'teks', w:24 }, { h:'WhatsApp', t:'hp', w:15 },
+      { h:'Biro', t:'teks', w:20 }, { h:'Agen', t:'teks', w:17 }, { h:'Produk', t:'teks', w:16 },
+      { h:'Orang', t:'angka', w:8, total:1 }, { h:'Anak', t:'angka', w:7, total:1 },
+      { h:'Harga satuan', t:'rp', w:14 }, { h:'Subtotal', t:'rp', w:15, total:1 },
+      { h:'Diskon', t:'rp', w:13, total:1 }, { h:'Add-on', t:'rp', w:13, total:1 },
+      { h:'Total', t:'rp', w:15, total:1 }, { h:'Sudah dibayar', t:'rp', w:15, total:1 },
+      { h:'Sisa tagihan', t:'rp', w:15, total:1 }, { h:'Kode voucher', t:'teks', w:13 },
+      { h:'Status', t:'status', w:15 }, { h:'Kapal', t:'teks', w:10 },
+      { h:'Sudah naik', t:'angka', w:10, total:1 }, { h:'Tarif komisi', t:'persen', w:11 },
+      { h:'Komisi', t:'rp', w:14, total:1 }, { h:'Hitungan orang agen', t:'angka', w:12 },
+    ],
+    baris: pesanan.map(o => {
+      const b = bayarPer[o.kode] || {};
+      return [o.kode, o.dibuat, o.tanggal_berangkat, o.tipe === 'biro' ? 'Biro' : 'Perorangan',
+        o.pemesan_nama, o.pemesan_hp, o.biro_nama, o.agen?.nama, o.produk?.nama,
+        o.pax, o.anak, o.harga_satuan_beku, o.subtotal, o.diskon_nominal, o.tambahan_nominal,
+        o.total, b.r_dibayar, b.r_sisa, o.kode_voucher_beku, labelStatus(o.status), o.kapal?.nama,
+        o.jml_naik, o.komisi_persen, o.komisi_nominal, o.komisi_tiket_kumulatif];
+    }),
+  });
+
+  if (pilih.bayar){
+    const kodePer = Object.fromEntries(pesanan.concat(berangkat).map(o => [o.id, o]));
+    /* Pembayaran bulan ini bisa milik pesanan bulan lalu — kodenya diambil
+       terpisah supaya baris itu tidak kosong. */
+    const kurang = [...new Set(bayar.map(r => r.pesanan_id).filter(id => !kodePer[id]))];
+    for (let i = 0; i < kurang.length; i += 200){
+      const { data } = await DB.from('pesanan').select('id,kode,pemesan_nama').in('id', kurang.slice(i, i + 200));
+      (data || []).forEach(o => kodePer[o.id] = o);
+    }
+    isi.sheet.push({
+      nama: 'Pembayaran', judul: 'Uang Masuk',
+      ket: 'Satu baris per pembayaran. Dasar tanggal: tanggal uang diterima.',
+      beku: 1,
+      kolom: [
+        { h:'Diterima', t:'jam', w:17 }, { h:'Kode pesanan', t:'teks', w:14 },
+        { h:'Pemesan', t:'teks', w:24 }, { h:'Metode', t:'teks', w:12 },
+        { h:'Ditagih', t:'rp', w:15, total:1 }, { h:'Diterima (Rp)', t:'rp', w:15, total:1 },
+        { h:'Referensi', t:'teks', w:18 }, { h:'Diverifikasi', t:'jam', w:17 },
+        { h:'Catatan', t:'teks', w:32 },
+      ],
+      baris: bayar.map(r => [r.waktu, kodePer[r.pesanan_id]?.kode, kodePer[r.pesanan_id]?.pemesan_nama,
+        r.metode, r.nominal_ditagih, r.nominal_diterima, r.referensi, r.diverifikasi_jam, r.catatan]),
+    });
+  }
+
+  if (pilih.komisi) isi.sheet.push({
+    nama: 'Komisi Agen', judul: 'Komisi Agen',
+    ket: 'Dari pesanan lunas yang dibuat di periode ini. Komisi tiap pesanan dikunci saat pesanan itu lunas.',
+    beku: 1,
+    kolom: [
+      { h:'Agen', t:'teks', w:26 }, { h:'Orang', t:'angka', w:10, total:1 },
+      { h:'Penjualan', t:'rp', w:17, total:1 }, { h:'Tarif sekarang', t:'persen', w:14 },
+      { h:'Komisi', t:'rp', w:16, total:1 },
+    ],
+    baris: (papan || []).map(a => [a.nama, a.tiket, a.omzet, a.tarif, a.komisi]),
+  });
+
+  if (pilih.berangkat){
+    const alamat = !!setel?.kolom_manifest?.alamat;
+    isi.sheet.push({
+      nama: 'Keberangkatan', judul: 'Daftar Keberangkatan',
+      ket: 'Rombongan lunas atau menunggu cek yang berangkat di periode ini. Dasar tanggal: tanggal berangkat.',
+      beku: 1,
+      kolom: [
+        { h:'Berangkat', t:'tgl', w:13 }, { h:'Kapal', t:'teks', w:10 }, { h:'Kode', t:'teks', w:13 },
+        { h:'Dipesan', t:'jam', w:17 }, { h:'Pemesan', t:'teks', w:24 }, { h:'WhatsApp', t:'hp', w:15 },
+        { h:'Biro', t:'teks', w:20 }, { h:'Produk', t:'teks', w:16 },
+        { h:'Orang', t:'angka', w:8, total:1 }, { h:'Anak', t:'angka', w:7, total:1 },
+        { h:'Sudah naik', t:'angka', w:10, total:1 },
+        ...(alamat ? [{ h:'Alamat sesuai KTP', t:'teks', w:44 }] : []),
+        { h:'Status', t:'status', w:15 },
+      ],
+      baris: berangkat.map(o => [o.tanggal_berangkat, o.kapal?.nama || 'belum', o.kode, o.dibuat,
+        o.pemesan_nama, o.pemesan_hp, o.biro_nama, o.produk?.nama, o.pax, o.anak, o.jml_naik,
+        ...(alamat ? [o.pemesan_alamat] : []), labelStatus(o.status)]),
+    });
+  }
+  return isi;
+}
+
+/* ---------------------------------------------------------------------
+   TAHAP 2 — susun buku Excel bergaya dari "isi".
+   Fungsi murni: hanya memakai ExcelJS dan isi, tidak menyentuh DB/layar,
+   supaya bisa diuji terpisah.
+   --------------------------------------------------------------------- */
+function bukuRekap(ExcelJS, isi){
+  const NAVY = 'FF0F2744', ABU = 'FF5B6B7F', GARIS = 'FFD5DEE8', SELANG = 'FFF5F8FB';
+  const FMT = {
+    rp:     '"Rp "#,##0;-"Rp "#,##0;"-"',
+    angka:  '#,##0',
+    persen: '0"%"',
+    tgl:    'dd mmm yyyy',
+    jam:    'dd mmm yyyy hh:mm',
+    hp:     '@',
+  };
+  const WARNA_STATUS = [
+    [/LUNAS|SUDAH NAIK/,          'FFD9F0E2', 'FF15603A'],
+    [/BELUM BAYAR|PERLU CEK/,     'FFFDF0D5', 'FF7A4E00'],
+    [/BATAL|KEDALUWARSA/,         'FFFBE0E0', 'FF9B1C1C'],
+  ];
+  /* Excel tidak punya zona waktu: tanggal disimpan "apa adanya". Jam UTC dari
+     database digeser +7 lalu ditulis sebagai UTC, supaya yang tampil jam WIB. */
+  const keTanggal = (v, t) => {
+    if (!v) return null;
+    if (t === 'tgl' && /^\d{4}-\d{2}-\d{2}$/.test(v)){
+      const [y, m, d] = v.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d));
+    }
+    const d = new Date(v); if (isNaN(d)) return String(v);
+    const w = new Date(d.getTime() + 7 * 3600e3);
+    return t === 'tgl' ? new Date(Date.UTC(w.getUTCFullYear(), w.getUTCMonth(), w.getUTCDate())) : w;
+  };
+  const dibuat = keTanggal(isi.dibuat, 'jam');
+  const teksDibuat = `${dibuat.getUTCDate()} ${BULAN_ID[dibuat.getUTCMonth()]} ${dibuat.getUTCFullYear()}, `
+    + `${String(dibuat.getUTCHours()).padStart(2,'0')}.${String(dibuat.getUTCMinutes()).padStart(2,'0')} WIB`;
+  const garisTipis = { style:'thin', color:{ argb:GARIS } };
+  const bingkai = { top:garisTipis, left:garisTipis, bottom:garisTipis, right:garisTipis };
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Dashboard The Tamperan Cruise';
+  wb.created = new Date();
+
+  const kepala = (ws, judul, ket, lebarKolom) => {
+    ws.mergeCells(1, 1, 1, lebarKolom);
+    const c1 = ws.getCell(1, 1);
+    c1.value = `${judul} · ${isi.periode}${isi.latihan ? ' (DATA LATIHAN)' : ''}`;
+    c1.font = { bold:true, size:15, color:{ argb:NAVY } };
+    ws.getRow(1).height = 24;
+    ws.mergeCells(2, 1, 2, lebarKolom);
+    const c2 = ws.getCell(2, 1);
+    c2.value = `The Tamperan Cruise · ${ket} Dibuat ${teksDibuat}.`;
+    c2.font = { italic:true, size:10, color:{ argb:ABU } };
+    c2.alignment = { wrapText:true, vertical:'top' };
+    ws.getRow(2).height = 30;
+  };
+  const aturCetak = (ws, barisJudul) => {
+    ws.pageSetup = { paperSize:9, orientation:'landscape', fitToPage:true, fitToWidth:1, fitToHeight:0,
+                     margins:{ left:0.4, right:0.4, top:0.5, bottom:0.5, header:0.3, footer:0.3 } };
+    if (barisJudul) ws.pageSetup.printTitlesRow = `${barisJudul}:${barisJudul}`;
+    ws.headerFooter.oddFooter = '&L&8The Tamperan Cruise&R&8Halaman &P dari &N';
+  };
+
+  /* ---- Ringkasan ---- */
+  if (isi.ringkasan){
+    const ws = wb.addWorksheet('Ringkasan', { views:[{ showGridLines:false }] });
+    ws.columns = [{ width:42 }, { width:22 }];
+    kepala(ws, 'Rekap Bulanan', 'Angka pokok periode ini; dasar tanggal ditulis di tiap bagian.', 2);
+    let r = 4;
+    for (const [label, nilai, t] of isi.ringkasan){
+      const row = ws.getRow(r);
+      if (nilai === null){
+        if (r > 4) r++;
+        const h = ws.getRow(r);
+        ws.mergeCells(r, 1, r, 2);
+        h.getCell(1).value = label.toUpperCase();
+        h.getCell(1).font = { bold:true, size:10, color:{ argb:'FFFFFFFF' } };
+        h.getCell(1).fill = { type:'pattern', pattern:'solid', fgColor:{ argb:NAVY } };
+        h.getCell(1).alignment = { vertical:'middle', indent:1 };
+        h.height = 20;
+      } else {
+        row.getCell(1).value = label;
+        row.getCell(1).alignment = { indent:1 };
+        row.getCell(2).value = Number(nilai) || 0;
+        row.getCell(2).numFmt = FMT[t] || FMT.angka;
+        row.getCell(2).font = { bold:true };
+        [1, 2].forEach(i => row.getCell(i).border = { bottom:garisTipis });
+        row.height = 18;
+      }
+      r++;
+    }
+    aturCetak(ws, 0);
+  }
+
+  /* ---- Sheet tabel ---- */
+  for (const sh of isi.sheet){
+    const n = sh.kolom.length, BJ = 4;                    /* baris judul kolom */
+    const ws = wb.addWorksheet(sh.nama, {
+      views:[{ state:'frozen', xSplit:sh.beku || 0, ySplit:BJ, showGridLines:false }] });
+    ws.columns = sh.kolom.map(k => ({ width:(k.w || 12) + 2 }));   /* +2 untuk jarak indent */
+    kepala(ws, sh.judul, sh.ket, n);
+
+    const hr = ws.getRow(BJ);
+    sh.kolom.forEach((k, i) => {
+      const c = hr.getCell(i + 1);
+      c.value = k.h;
+      c.font = { bold:true, color:{ argb:'FFFFFFFF' }, size:10 };
+      c.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:NAVY } };
+      c.alignment = { vertical:'middle', horizontal: ['rp','angka','persen'].includes(k.t) ? 'right' : 'left',
+                      wrapText:true, indent:1 };
+      c.border = bingkai;
+    });
+    hr.height = 30;
+
+    if (!sh.baris.length){
+      ws.mergeCells(BJ + 1, 1, BJ + 1, n);
+      const c = ws.getCell(BJ + 1, 1);
+      c.value = 'Tidak ada data di periode ini.';
+      c.font = { italic:true, color:{ argb:ABU } };
+      aturCetak(ws, BJ);
+      continue;
+    }
+
+    sh.baris.forEach((b, j) => {
+      const row = ws.getRow(BJ + 1 + j);
+      sh.kolom.forEach((k, i) => {
+        const c = row.getCell(i + 1);
+        let v = b[i];
+        if (v === undefined || v === '') v = null;
+        if (v !== null){
+          if (k.t === 'tgl' || k.t === 'jam') v = keTanggal(v, k.t);
+          else if (['rp','angka','persen'].includes(k.t)) v = Number(v);
+          else v = String(v);
+        }
+        c.value = v;
+        if (FMT[k.t]) c.numFmt = FMT[k.t];
+        c.border = bingkai;
+        /* indent:1 = jarak dari garis sel, supaya angka & teks tidak menempel. */
+        c.alignment = { vertical:'middle', indent:1,
+                        horizontal: ['rp','angka','persen'].includes(k.t) ? 'right' : 'left' };
+        if (j % 2) c.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:SELANG } };
+        if (k.t === 'status' && v){
+          const w = WARNA_STATUS.find(([re]) => re.test(v));
+          if (w){
+            c.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:w[1] } };
+            c.font = { bold:true, size:9, color:{ argb:w[2] } };
+            c.alignment = { vertical:'middle', horizontal:'center' };
+          }
+        }
+      });
+      row.height = 18;
+    });
+
+    /* Baris TOTAL memakai rumus SUM, bukan angka mati: kalau baris di atasnya
+       disaring/diubah di Excel, totalnya ikut. */
+    const rt = BJ + 1 + sh.baris.length, awal = BJ + 1, akhir = rt - 1;
+    const tr = ws.getRow(rt);
+    sh.kolom.forEach((k, i) => {
+      const c = tr.getCell(i + 1);
+      if (i === 0) c.value = 'TOTAL';
+      else if (k.total){
+        const L = ws.getColumn(i + 1).letter;
+        c.value = { formula:`SUBTOTAL(9,${L}${awal}:${L}${akhir})` };
+        c.numFmt = FMT[k.t] || FMT.angka;
+        c.alignment = { horizontal:'right', indent:1 };
+      }
+      if (i === 0) c.alignment = { indent:1 };
+      c.font = { bold:true, color:{ argb:NAVY } };
+      c.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFE3EAF3' } };
+      c.border = { top:{ style:'medium', color:{ argb:NAVY } }, bottom:garisTipis };
+    });
+    tr.height = 20;
+
+    ws.autoFilter = { from:{ row:BJ, column:1 }, to:{ row:akhir, column:n } };
+    aturCetak(ws, BJ);
+  }
+  return wb;
+}
 
 async function unduhEkspor(periode){
   const pilih = S.eksporPilih || {};
   if (!Object.values(pilih).some(Boolean)) return pesan('Centang minimal satu sheet dulu.', 5000);
   const tombol = $('ek-unduh'), status = $('ek-status');
-  tombol.disabled = true;
+  if (tombol) tombol.disabled = true;
   const lapor = t => { if (status) status.textContent = t; };
   try {
     lapor('Menyiapkan pustaka Excel…');
-    const XLSX = await import(XLSX_URL);
-
-    const bts = batasBulanWib(periode);
-    /* Batas bulan untuk kolom bertipe TANGGAL (tanggal_berangkat): cukup teks
-       YYYY-MM-DD, bukan jam UTC seperti batasBulanWib(). */
-    const tglMulai = periode ? `${periode}-01` : null;
-    const tglSampai = periode ? (() => {
-      const [th, bl] = periode.split('-').map(Number);
-      return bl === 12 ? `${th + 1}-01-01` : `${th}-${String(bl + 1).padStart(2,'0')}-01`;
-    })() : null;
-
-    lapor('Mengambil pesanan…');
-    const KOLOM_PESANAN = 'id,kode,tipe,pax,anak,status,dibuat,tanggal_berangkat,'
-      + 'pemesan_nama,pemesan_hp,pemesan_alamat,biro_nama,harga_satuan_beku,subtotal,'
-      + 'diskon_nominal,tambahan_nominal,total,kode_voucher_beku,jml_naik,'
-      + 'komisi_persen,komisi_nominal,komisi_tiket_kumulatif,'
-      + 'produk(nama),agen(nama),kapal(nama)';
-    const pesanan = await ambilSemuaBaris(() => {
-      let q = DB.from('pesanan').select(KOLOM_PESANAN);
-      if (bts) q = q.gte('dibuat', bts.mulai).lt('dibuat', bts.sampai);
-      return q.order('dibuat');
-    });
-
-    const [{ data: rb }, { data: papan }, { data: setel }] = await Promise.all([
-      DB.rpc('ringkas_bayar_banyak', { p_kode: null }),
-      DB.rpc('papan_peringkat', { p_periode: periode || null }),
-      DB.from('pengaturan').select('kolom_manifest').single(),
-    ]);
-    const bayarPer = Object.fromEntries((rb || []).map(r => [r.r_kode, r]));
-
-    const wb = XLSX.utils.book_new();
-    const tambahSheet = (nama, baris, lebar) => {
-      const ws = XLSX.utils.json_to_sheet(baris.length ? baris : [{ Keterangan: 'Tidak ada data di periode ini.' }]);
-      if (lebar) ws['!cols'] = lebar.map(w => ({ wch: w }));
-      XLSX.utils.book_append_sheet(wb, ws, nama);
-    };
-
-    /* ---------- Pembayaran (dipakai juga oleh Ringkasan) ---------- */
-    let bayar = [];
-    if (pilih.bayar || pilih.ringkasan){
-      lapor('Mengambil pembayaran…');
-      bayar = await ambilSemuaBaris(() => {
-        let q = DB.from('pembayaran')
-          .select('pesanan_id,metode,nominal_ditagih,nominal_diterima,referensi,waktu,diverifikasi_jam,catatan');
-        if (bts) q = q.gte('waktu', bts.mulai).lt('waktu', bts.sampai);
-        return q.order('waktu');
-      });
-    }
-
-    /* ---------- Keberangkatan (dipakai juga oleh Ringkasan) ---------- */
-    let berangkat = [];
-    if (pilih.berangkat || pilih.ringkasan){
-      lapor('Mengambil keberangkatan…');
-      berangkat = await ambilSemuaBaris(() => {
-        let q = DB.from('pesanan').select(KOLOM_PESANAN)
-          .in('status', ['waiting','paid','boarded']);
-        if (tglMulai) q = q.gte('tanggal_berangkat', tglMulai).lt('tanggal_berangkat', tglSampai);
-        return q.order('tanggal_berangkat');
-      });
-      berangkat = berangkat.filter(o => o.tanggal_berangkat);
-    }
-
+    const ExcelJS = await muatExcelJS();
+    const isi = await siapkanIsiEkspor(periode, pilih, lapor);
     lapor('Menyusun berkas…');
-    const LUNAS = ['paid','boarded'];
-    const lunas = pesanan.filter(o => LUNAS.includes(o.status));
-    const jml = (arr, k) => arr.reduce((a, o) => a + (Number(o[k]) || 0), 0);
-
-    if (pilih.ringkasan){
-      const isi = [
-        ['Periode', namaPeriode(periode)],
-        ['Dibuat pada', jamWib(new Date().toISOString()) + ' WIB'],
-        ['', ''],
-        ['— Berdasarkan tanggal pesanan DIBUAT —', ''],
-        ['Pesanan masuk (semua status)', pesanan.length],
-        ['Pesanan lunas', lunas.length],
-        ['Orang (pesanan lunas)', jml(lunas, 'pax')],
-        ['Penjualan lunas (Rp)', jml(lunas, 'total')],
-        ['Komisi agen (Rp)', jml(papan || [], 'komisi')],
-        ['Belum bayar', pesanan.filter(o => o.status === 'pending').length],
-        ['Perlu cek pembayaran', pesanan.filter(o => o.status === 'waiting').length],
-        ['Batal', pesanan.filter(o => String(o.status).startsWith('cancel')).length],
-        ['', ''],
-        ['— Berdasarkan tanggal uang DITERIMA —', ''],
-        ['Jumlah pembayaran', bayar.length],
-        ['Uang diterima (Rp)', jml(bayar, 'nominal_diterima')],
-        ['', ''],
-        ['— Berdasarkan tanggal BERANGKAT —', ''],
-        ['Rombongan berangkat', berangkat.length],
-        ['Orang berangkat', jml(berangkat, 'pax')],
-        ['Sudah tercatat naik', jml(berangkat, 'jml_naik')],
-      ].map(([a, b]) => ({ Keterangan: a, Nilai: b }));
-      tambahSheet('Ringkasan', isi, [44, 22]);
-    }
-
-    if (pilih.pesanan){
-      tambahSheet('Pesanan', pesanan.map(o => {
-        const b = bayarPer[o.kode] || {};
-        return {
-          'Kode': o.kode,
-          'Dibuat (WIB)': jamWib(o.dibuat),
-          'Berangkat': o.tanggal_berangkat || '',
-          'Tipe': o.tipe === 'biro' ? 'Biro' : 'Perorangan',
-          'Pemesan': o.pemesan_nama || '',
-          'WhatsApp': o.pemesan_hp || '',
-          'Biro': o.biro_nama || '',
-          'Agen': o.agen?.nama || '',
-          'Produk': o.produk?.nama || '',
-          'Orang': o.pax || 0,
-          'Anak': o.anak || 0,
-          'Harga satuan': o.harga_satuan_beku ?? '',
-          'Subtotal': o.subtotal ?? '',
-          'Diskon': o.diskon_nominal ?? 0,
-          'Tambahan (add-on)': o.tambahan_nominal ?? 0,
-          'Total': o.total ?? 0,
-          'Sudah dibayar': b.r_dibayar ?? '',
-          'Sisa tagihan': b.r_sisa ?? '',
-          'Kode voucher': o.kode_voucher_beku || '',
-          'Status': labelStatus(o.status),
-          'Kapal': o.kapal?.nama || '',
-          'Sudah naik': o.jml_naik || 0,
-          'Tarif komisi (%)': o.komisi_persen ?? '',
-          'Komisi (Rp)': o.komisi_nominal ?? '',
-          'Hitungan orang agen': o.komisi_tiket_kumulatif ?? '',
-        };
-      }), [12,17,11,11,22,15,20,18,16,7,6,12,12,10,12,12,13,12,12,13,10,10,12,12,12]);
-    }
-
-    if (pilih.bayar){
-      const kodePer = Object.fromEntries(pesanan.concat(berangkat).map(o => [o.id, o]));
-      /* Pembayaran bulan ini bisa milik pesanan bulan lalu — kode & namanya
-         diambil terpisah supaya baris itu tidak kosong. */
-      const kurang = [...new Set(bayar.map(r => r.pesanan_id).filter(id => !kodePer[id]))];
-      for (let i = 0; i < kurang.length; i += 200){
-        const { data } = await DB.from('pesanan').select('id,kode,pemesan_nama')
-          .in('id', kurang.slice(i, i + 200));
-        (data || []).forEach(o => kodePer[o.id] = o);
-      }
-      tambahSheet('Pembayaran', bayar.map(r => ({
-        'Diterima (WIB)': jamWib(r.waktu),
-        'Kode pesanan': kodePer[r.pesanan_id]?.kode || '',
-        'Pemesan': kodePer[r.pesanan_id]?.pemesan_nama || '',
-        'Metode': r.metode || '',
-        'Ditagih': r.nominal_ditagih ?? '',
-        'Diterima': r.nominal_diterima ?? 0,
-        'Referensi': r.referensi || '',
-        'Diverifikasi (WIB)': jamWib(r.diverifikasi_jam),
-        'Catatan': r.catatan || '',
-      })), [17,12,22,11,12,12,18,17,30]);
-    }
-
-    if (pilih.komisi){
-      tambahSheet('Komisi Agen', (papan || []).map(a => ({
-        'Agen': a.nama,
-        'Orang (pesanan lunas)': a.tiket,
-        'Penjualan (Rp)': a.omzet,
-        'Tarif sekarang (%)': a.tarif,
-        'Komisi (Rp)': a.komisi,
-      })), [24,20,16,18,14]);
-    }
-
-    if (pilih.berangkat){
-      const alamat = !!setel?.kolom_manifest?.alamat;
-      tambahSheet('Keberangkatan', berangkat.map(o => ({
-        'Berangkat': o.tanggal_berangkat,
-        'Kapal': o.kapal?.nama || 'belum',
-        'Kode': o.kode,
-        'Dipesan (WIB)': jamWib(o.dibuat),
-        'Pemesan': o.pemesan_nama || '',
-        'WhatsApp': o.pemesan_hp || '',
-        'Biro': o.biro_nama || '',
-        'Produk': o.produk?.nama || '',
-        'Orang': o.pax || 0,
-        'Anak': o.anak || 0,
-        'Sudah naik': o.jml_naik || 0,
-        ...(alamat ? { 'Alamat sesuai KTP': o.pemesan_alamat || '' } : {}),
-        'Status': labelStatus(o.status),
-      })), [11,10,12,17,22,15,20,16,7,6,10, ...(alamat ? [40] : []), 12]);
-    }
-
+    const buf = await bukuRekap(ExcelJS, isi).xlsx.writeBuffer();
     const nama = `Rekap-Tamperan-${periode || 'semua-waktu'}${S.latihan ? '-LATIHAN' : ''}.xlsx`;
-    XLSX.writeFile(wb, nama);
+    const url = URL.createObjectURL(new Blob([buf],
+      { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = nama; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
     try {
       await DB.rpc('catat_audit', { p_aksi:'ekspor.unduh', p_objek:'ekspor:' + (periode || 'semua'),
         p_dari:null, p_ke:SHEET_EKSPOR.filter(([k]) => pilih[k]).map(x => x[1]).join(', ') });
@@ -4957,11 +5139,9 @@ async function unduhEkspor(periode){
     pesan(`<b>${esc(nama)}</b> sudah diunduh.`, 7000);
   } catch (e) {
     lapor('');
-    if (String(e?.message || e).includes('dynamically imported module'))
-      return pesan('Pustaka Excel gagal dimuat. Periksa koneksi internet lalu coba lagi.', 9000);
     gagalPesan(e);
   } finally {
-    tombol.disabled = false;
+    if (tombol) tombol.disabled = false;
   }
 }
 

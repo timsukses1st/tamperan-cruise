@@ -796,6 +796,8 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-12l', 'Kode unik 3 digit di belakang total pesanan, untuk mencocokkan transfer dengan mutasi rekening'],
+  ['2026-11-12k', 'Data latihan: referensi pembayaran diseragamkan jadi <bank> LAT<nomor pesanan>, tidak lagi angka karangan'],
   ['2026-11-12j', 'Ekspor Data: berkas Excel dirapikan (judul, format rupiah & tanggal, warna status, baris total, jarak sel, siap cetak)'],
   ['2026-11-12i', 'Ekspor Data: kotak centang rata kiri, tidak lagi terdorong ke tengah'],
   ['2026-11-12h', 'Tab baru Ekspor Data: rekap bulanan ke Excel (ringkasan, pesanan, pembayaran, komisi agen, keberangkatan)'],
@@ -1144,7 +1146,10 @@ function dataLatihan(){
      (jml_naik), jadi tidak ada lagi yang perlu dibuatkan barisnya. */
   return {
     pesanan: [
-      { id:'o1', kode:'TTC-LAT01', tipe:'perorangan', pax:2, anak:0, total:285000,
+      /* Kode unik data latihan = nomor pesanan LAT (LAT01 -> 1, LAT10 -> 10),
+         aturan sama dengan referensi pembayaran latihan: langsung kelihatan
+         palsu dan jelas milik pesanan mana. Total = 300.000 - 15.000 + 1. */
+      { id:'o1', kode:'TTC-LAT01', tipe:'perorangan', pax:2, anak:0, total:285001, kode_unik:1,
         subtotal:300000, diskon_nominal:15000, tambahan_nominal:0,
         status:'pending', fu_status:'belum', fu_terakhir:null,
         dibuat:JAM(3), diubah:JAM(3), tanggal_berangkat:HARI(2), kapal_id:null,
@@ -1260,7 +1265,7 @@ function dataLatihan(){
         kode_voucher_beku:null, pemesan_nama:'Dwi Lestari', pemesan_hp:'081200000009',
         agen_id:AG.anto, produk:pr('Cruise Daily'), agen:{nama:'Anto Prasetyo'}, kapal:null,
         jml_naik:0 },
-      { id:'o10', kode:'TTC-LAT10', tipe:'perorangan', pax:3, anak:1, total:427500,
+      { id:'o10', kode:'TTC-LAT10', tipe:'perorangan', pax:3, anak:1, total:427510, kode_unik:10,
         subtotal:450000, diskon_nominal:22500, tambahan_nominal:0,
         status:'pending', fu_status:'belum', fu_terakhir:null,
         dibuat:JAM(4), diubah:JAM(4), tanggal_berangkat:HARI(3), kapal_id:null,
@@ -1499,43 +1504,51 @@ function dataLatihan(){
         catatan:'2 orang tidak naik di pesanan perorangan. Saldo atas nama nomor HP.' },
     ],
 
+    /* ATURAN REFERENSI DATA LATIHAN (12 Nov 2026, setelah ditegur Kak Mer):
+       <bank> LAT<nomor pesanan>[-urutan bayar], mis. "BCA LAT03-2".
+       Dulu isinya angka acak seperti "BCA 5119" yang terlihat persis seperti
+       nomor transaksi sungguhan — kalau berkas latihan sampai ke keuangan,
+       mereka akan mencarinya di mutasi bank dan tidak pernah ketemu.
+       Sekarang siapa pun yang membaca langsung tahu: ini latihan, dan milik
+       pesanan mana. Pembayaran tunai tetap kosong (memang tidak ada bukti).
+       Pembayaran baru WAJIB mengikuti pola yang sama. */
     /* Riwayat pembayaran. Dipakai ringkas_bayar/riwayat_bayar versi latihan.
        o3, o4, o5 lunas; o15 baru DP separuh; o16 DP lalu dibatalkan. */
     pembayaran: [
       { id:'y1', pesanan_id:'o3', metode:'transfer', nominal_diterima:15000000,
-        referensi:'BCA 8821', catatan:'DP rombongan 50%', waktu:JAM(29),
+        referensi:'BCA LAT03-1', catatan:'DP rombongan 50%', waktu:JAM(29),
         diverifikasi_jam:JAM(29), oleh:'Dika Kurniawan' },
       { id:'y2', pesanan_id:'o3', metode:'transfer', nominal_diterima:14640000,
-        referensi:'BCA 9043', catatan:'Pelunasan', waktu:JAM(27),
+        referensi:'BCA LAT03-2', catatan:'Pelunasan', waktu:JAM(27),
         diverifikasi_jam:JAM(27), oleh:'Dika Kurniawan' },
       { id:'y3', pesanan_id:'o4', metode:'qris_statis', nominal_diterima:427500,
-        referensi:null, catatan:null, waktu:JAM(25),
+        referensi:'QRIS LAT04', catatan:null, waktu:JAM(25),
         diverifikasi_jam:JAM(25), oleh:'Uun Staf COO' },
       { id:'y4', pesanan_id:'o5', metode:'tunai', nominal_diterima:665000,
         referensi:null, catatan:'Bayar di dermaga', waktu:JAM(20),
         diverifikasi_jam:JAM(20), oleh:'Uun Staf COO' },
       { id:'y5', pesanan_id:'o15', metode:'transfer', nominal_diterima:5000000,
-        referensi:'Mandiri 4417', catatan:'DP 50%', waktu:JAM(17),
+        referensi:'Mandiri LAT15', catatan:'DP 50%', waktu:JAM(17),
         diverifikasi_jam:JAM(17), oleh:'Dika Kurniawan' },
       { id:'y6', pesanan_id:'o16', metode:'transfer', nominal_diterima:3000000,
-        referensi:'BRI 1102', catatan:'DP rombongan', waktu:JAM(58),
+        referensi:'BRI LAT16', catatan:'DP rombongan', waktu:JAM(58),
         diverifikasi_jam:JAM(58), oleh:'Dika Kurniawan' },
       { id:'y8', pesanan_id:'o19', metode:'transfer', nominal_diterima:3724000,
-        referensi:'BCA 5119', catatan:'Simulasi komisi', waktu:JAM(23),
+        referensi:'BCA LAT19', catatan:'Simulasi komisi', waktu:JAM(23),
         diverifikasi_jam:JAM(23), oleh:'Uun Staf COO' },
       { id:'y9', pesanan_id:'o20', metode:'transfer', nominal_diterima:855000,
-        referensi:'BCA 5120', catatan:'Simulasi komisi', waktu:JAM(19),
+        referensi:'BCA LAT20', catatan:'Simulasi komisi', waktu:JAM(19),
         diverifikasi_jam:JAM(19), oleh:'Uun Staf COO' },
       { id:'y10', pesanan_id:'o21', metode:'transfer', nominal_diterima:3705000,
-        referensi:'BCA 5121', catatan:'Simulasi komisi', waktu:JAM(13),
+        referensi:'BCA LAT21', catatan:'Simulasi komisi', waktu:JAM(13),
         diverifikasi_jam:JAM(13), oleh:'Uun Staf COO' },
       { id:'y11', pesanan_id:'o22', metode:'transfer', nominal_diterima:285000,
-        referensi:'BCA 5122', catatan:'Simulasi komisi', waktu:JAM(6),
+        referensi:'BCA LAT22', catatan:'Simulasi komisi', waktu:JAM(6),
         diverifikasi_jam:JAM(6), oleh:'Uun Staf COO' },
       /* o17 SENGAJA tidak punya baris di sini: itulah intinya — statusnya lunas
          tapi pembukuannya kosong. */
       { id:'y7', pesanan_id:'o18', metode:'transfer', nominal_diterima:2000000,
-        referensi:'BCA 7781', catatan:'DP, lalu batal karena cuaca', waktu:JAM(290),
+        referensi:'BCA LAT18', catatan:'DP, lalu batal karena cuaca', waktu:JAM(290),
         diverifikasi_jam:JAM(290), oleh:'Dika Kurniawan' },
     ],
     penumpang: [], audit: [], pesanan_tambahan: [],
@@ -1651,7 +1664,7 @@ function kunciKomisiLatihan(){
     const k = o.agen_id + '|' + String(o.dibuat).slice(0,7);
     kum[k] = (kum[k] || 0) + o.pax;
     const tarif = amb && kum[k] >= amb ? atas : bawah;
-    const dasar = bruto ? o.subtotal : o.total;
+    const dasar = bruto ? o.subtotal : o.total - (o.kode_unik || 0);   /* sama dengan kunci_komisi(): tanpa kode unik */
     o.komisi_persen = tarif;
     o.komisi_dasar = dasar;
     o.komisi_nominal = Math.round(dasar * tarif / 100);
@@ -3051,6 +3064,7 @@ async function tabPesanan(){
            /* Komisi DIKUNCI di baris pesanan sejak 11 Nov 2026. Dibaca, tidak
               dihitung ulang di sini — kalau dihitung ulang, layar bisa
               menampilkan angka yang berbeda dari yang benar-benar tersimpan. */
+           + 'kode_unik,'
            + 'komisi_persen,komisi_nominal,komisi_tiket_kumulatif,'
            + 'produk(nama),agen(nama),kapal(nama)');
   if (bts) q = q.gte('dibuat', bts.mulai).lt('dibuat', bts.sampai);
@@ -3111,7 +3125,8 @@ async function tabPesanan(){
               :'<span class="pill p-mute">LANGSUNG</span>'}</td>
             <td class="nw"><span class="sel2" style="flex-wrap:wrap"><span class="pill ${st[1]}">${st[0]}</span>${
               aksiStatus(o)}</span></td>
-            <td class="num nw" data-urut="${o.total}">${rp(o.total)}${selBayar(o, bayarPeta[o.kode])}</td>${
+            <td class="num nw" data-urut="${o.total}">${rp(o.total)}${o.kode_unik
+              ? `<div class="hint" title="Kode unik transfer: 3 angka terakhir total">kode unik ${o.kode_unik}</div>` : ''}${selBayar(o, bayarPeta[o.kode])}</td>${
             `<td class="num nw" data-urut="${o.komisi_nominal||0}">${
               o.komisi_nominal == null
                 ? `<span style="color:var(--muted)">&mdash;</span>`
@@ -3611,7 +3626,7 @@ async function popBayar(kode, muatUlang){
   const [{ data: rs, error: e1 }, { data: rw }, { data: pd }] = await Promise.all([
     DB.rpc('ringkas_bayar',  { p_kode: kode }),
     DB.rpc('riwayat_bayar',  { p_kode: kode }),
-    DB.from('pesanan').select('dp_target').eq('kode', kode).maybeSingle(),
+    DB.from('pesanan').select('dp_target,kode_unik').eq('kode', kode).maybeSingle(),
   ]);
   if (e1) return gagalPesan(e1);
   const r = Array.isArray(rs) ? rs[0] : rs;
@@ -3631,6 +3646,8 @@ async function popBayar(kode, muatUlang){
 
     <div style="margin-bottom:14px">
       <div class="uang"><span>Total tagihan</span><b>${rp(r.r_total)}</b></div>
+      ${pd && pd.kode_unik ? `<div class="hint" style="margin:-4px 0 6px;text-align:right">
+        termasuk <b>kode unik ${pd.kode_unik}</b> &mdash; cocokkan 3 angka terakhir dengan mutasi rekening</div>` : ''}
       <div class="uang"><span>Sudah masuk</span><b style="color:var(--ok)">${rp(r.r_dibayar)}</b></div>
       <div class="uang"><span>Sisa</span><b style="color:${
         r.r_sisa > 0 ? 'var(--warn)' : 'var(--muted)'}">${rp(r.r_sisa)}</b></div>
@@ -4787,7 +4804,7 @@ async function siapkanIsiEkspor(periode, pilih, lapor){
   lapor('Mengambil pesanan…');
   const KOLOM_PESANAN = 'id,kode,tipe,pax,anak,status,dibuat,tanggal_berangkat,'
     + 'pemesan_nama,pemesan_hp,pemesan_alamat,biro_nama,harga_satuan_beku,subtotal,'
-    + 'diskon_nominal,tambahan_nominal,total,kode_voucher_beku,jml_naik,'
+    + 'diskon_nominal,tambahan_nominal,kode_unik,total,kode_voucher_beku,jml_naik,'
     + 'komisi_persen,komisi_nominal,komisi_tiket_kumulatif,'
     + 'produk(nama),agen(nama),kapal(nama)';
   const pesanan = await ambilSemuaBaris(() => {
@@ -4851,7 +4868,7 @@ async function siapkanIsiEkspor(periode, pilih, lapor){
 
   if (pilih.pesanan) isi.sheet.push({
     nama: 'Pesanan', judul: 'Daftar Pesanan',
-    ket: 'Semua pesanan yang dibuat di periode ini, semua status. Dasar tanggal: tanggal pesanan dibuat.',
+    ket: 'Semua pesanan yang dibuat di periode ini, semua status. Dasar tanggal: tanggal pesanan dibuat. Total = Subtotal - Diskon + Add-on + Kode unik; komisi dihitung tanpa kode unik.',
     beku: 1,
     kolom: [
       { h:'Kode', t:'teks', w:13 }, { h:'Dibuat', t:'jam', w:17 }, { h:'Berangkat', t:'tgl', w:13 },
@@ -4860,7 +4877,7 @@ async function siapkanIsiEkspor(periode, pilih, lapor){
       { h:'Orang', t:'angka', w:8, total:1 }, { h:'Anak', t:'angka', w:7, total:1 },
       { h:'Harga satuan', t:'rp', w:14 }, { h:'Subtotal', t:'rp', w:15, total:1 },
       { h:'Diskon', t:'rp', w:13, total:1 }, { h:'Add-on', t:'rp', w:13, total:1 },
-      { h:'Total', t:'rp', w:15, total:1 }, { h:'Sudah dibayar', t:'rp', w:15, total:1 },
+      { h:'Kode unik', t:'rp', w:11, total:1 }, { h:'Total', t:'rp', w:15, total:1 }, { h:'Sudah dibayar', t:'rp', w:15, total:1 },
       { h:'Sisa tagihan', t:'rp', w:15, total:1 }, { h:'Kode voucher', t:'teks', w:13 },
       { h:'Status', t:'status', w:15 }, { h:'Kapal', t:'teks', w:10 },
       { h:'Sudah naik', t:'angka', w:10, total:1 }, { h:'Tarif komisi', t:'persen', w:11 },
@@ -4871,7 +4888,7 @@ async function siapkanIsiEkspor(periode, pilih, lapor){
       return [o.kode, o.dibuat, o.tanggal_berangkat, o.tipe === 'biro' ? 'Biro' : 'Perorangan',
         o.pemesan_nama, o.pemesan_hp, o.biro_nama, o.agen?.nama, o.produk?.nama,
         o.pax, o.anak, o.harga_satuan_beku, o.subtotal, o.diskon_nominal, o.tambahan_nominal,
-        o.total, b.r_dibayar, b.r_sisa, o.kode_voucher_beku, labelStatus(o.status), o.kapal?.nama,
+        o.kode_unik, o.total, b.r_dibayar, b.r_sisa, o.kode_voucher_beku, labelStatus(o.status), o.kapal?.nama,
         o.jml_naik, o.komisi_persen, o.komisi_nominal, o.komisi_tiket_kumulatif];
     }),
   });

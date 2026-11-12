@@ -795,6 +795,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-12d', 'Tab Komisi agen: agen yang belum punya penjualan lunas kini tertulis tarif 5%, bukan 0%'],
   ['2026-11-12c', 'Mode panduan: simulasi komisi agen Sari, 5% sampai tembus 20 orang lalu 10%'],
   ['2026-11-12b', 'Sisa tulisan NIK dan "nama penumpang diisi belakangan di Manifest" dihapus dari layar'],
   ['2026-11-12a', 'Tulisan komisi disesuaikan aturan Pak Dika: tarif dikunci saat pesanan lunas, pesanan lama tidak ikut naik'],
@@ -7164,7 +7165,12 @@ async function tabKomisi(){
   const pesananku = (semuaPesanan||[])
     .filter(o => S.agenId && o.agen_id === S.agenId)
     .filter(o => !per || String(o.dibuat).slice(0,7) === per);
-  const L=lb||[], saya=L.find(x=>x.agen_id===S.agenId)||{tiket:0,omzet:0,tarif:0,komisi:0};
+  /* Agen yang belum punya pesanan lunas bulan ini TIDAK punya baris di
+     papan_peringkat(). Dulu cadangannya tarif:0, jadi layar menulis
+     "TARIF 0%" — seolah agen itu tidak dapat komisi sama sekali. Yang benar:
+     pesanan lunas pertamanya akan dapat tarif bawah. (12 Nov 2026) */
+  const L=lb||[], saya=L.find(x=>x.agen_id===S.agenId)
+    ||{tiket:0,omzet:0,tarif:Number(aturTier.r_bawah)||0,komisi:0};
   const pos=L.findIndex(x=>x.agen_id===S.agenId)+1;
   const sisa=Math.max(0, ambang - saya.tiket);
 

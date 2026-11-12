@@ -795,6 +795,8 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-12g', 'Kolom Dipesan (tanggal pesanan dibuat) di Daftar boarding, Pembagian kapal, dan Manifest'],
+  ['2026-11-12f', 'Keberangkatan: saringan Hari ini dan Bulan berangkat di Daftar, Pembagian kapal, dan Manifest'],
   ['2026-11-12e', 'Peran Owner dan Admin dilebur jadi Admin: semua akses kecuali Kelola Akses'],
   ['2026-11-12d', 'Tab Komisi agen: agen yang belum punya penjualan lunas kini tertulis tarif 5%, bukan 0%'],
   ['2026-11-12c', 'Mode panduan: simulasi komisi agen Sari, 5% sampai tembus 20 orang lalu 10%'],
@@ -1914,7 +1916,7 @@ function rpcLatihan(nama, arg = {}){
 
     catat_bayar: () => {
       if (!['super','admin'].includes(S.peran))
-        throw { code:'42501', message:'Hanya Super Admin, Owner, atau Admin yang boleh '
+        throw { code:'42501', message:'Hanya Super Admin atau Admin yang boleh '
                                     + 'mencatat pembayaran.' };
       if (!['qris_dinamis','qris_statis','va','transfer','tunai'].includes(arg.p_metode))
         throw { code:'22023', message:`Metode pembayaran "${arg.p_metode}" tidak dikenal.` };
@@ -1950,7 +1952,7 @@ function rpcLatihan(nama, arg = {}){
 
     buat_pesanan_biro: () => {
       if (!['super','admin'].includes(S.peran))
-        throw { code:'42501', message:'Hanya Super Admin atau Owner yang boleh membuat '
+        throw { code:'42501', message:'Hanya Super Admin atau Admin yang boleh membuat '
                                     + 'pesanan biro dengan harga nego.' };
       const b = (LATIH.biro || []).find(x => x.id === arg.p_biro_id);
       if (!b)        throw { code:'22023', message:'Biro tidak ditemukan.' };
@@ -2013,7 +2015,7 @@ function rpcLatihan(nama, arg = {}){
 
     porsi_tak_naik_ke_deposit: () => {
       if (!['super','admin'].includes(S.peran))
-        throw { code:'42501', message:'Hanya Super Admin atau Owner yang boleh memindahkan '
+        throw { code:'42501', message:'Hanya Super Admin atau Admin yang boleh memindahkan '
                                     + 'porsi tak terpakai ke deposit.' };
       const o = P.find(x => x.kode === arg.p_kode);
       if (!o) throw { code:'22023', message:`Pesanan ${arg.p_kode} tidak ditemukan.` };
@@ -2086,7 +2088,7 @@ function rpcLatihan(nama, arg = {}){
 
     dp_batal_ke_deposit: () => {
       if (!['super','admin'].includes(S.peran))
-        throw { code:'42501', message:'Hanya Super Admin atau Owner yang boleh memindahkan '
+        throw { code:'42501', message:'Hanya Super Admin atau Admin yang boleh memindahkan '
                                     + 'DP batal ke deposit.' };
       const o = P.find(x => x.kode === arg.p_kode);
       if (!o) throw { code:'22023', message:`Pesanan ${arg.p_kode} tidak ditemukan.` };
@@ -2793,6 +2795,80 @@ const periodeKini = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
+
+/* ====================================================================
+   SARINGAN TANGGAL BERANGKAT — dipakai tiga layar Keberangkatan
+   (Daftar, Pembagian kapal, Manifest). Ditambahkan 12 Nov 2026 atas
+   permintaan Kak Mer: begitu penumpang menumpuk, petugas dermaga tidak boleh
+   harus mencari baris hari ini satu per satu.
+
+   Sengaja BERBEDA dari kartuPeriode(): yang itu menyaring tanggal pesanan
+   DIBUAT (dasar komisi), yang ini tanggal BERANGKAT (dasar kerja dermaga).
+   Pesanan yang dibuat Oktober untuk berangkat November harus muncul di
+   November di sini.
+
+   Satu keadaan (S.brTgl) untuk ketiga layar, supaya pindah sub-tab tidak
+   mengembalikan saringan ke awal. Awalnya: petugas boarding langsung
+   "Hari ini", peran lain bulan berjalan. */
+const hariIniLokal = () => {
+  /* Waktu lokal, BUKAN toISOString(): yang itu UTC, jadi di WIB pukul
+     00.00-07.00 "hari ini" terbaca tanggal kemarin. */
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+};
+function saringBerangkatAwal(){
+  if (S.brTgl === undefined)
+    S.brTgl = S.peran === 'boarding' ? { mode:'hari' } : { mode:'bulan', bulan: periodeKini() };
+}
+const lolosBerangkat = tg => {
+  const f = S.brTgl || {};
+  if (f.mode === 'hari') return tg === hariIniLokal();
+  if (f.bulan) return String(tg || '').slice(0,7) === f.bulan;
+  return true;                                        /* Semua waktu */
+};
+const labelBerangkat = () => {
+  const f = S.brTgl || {};
+  return f.mode === 'hari' ? 'hari ini' : f.bulan ? 'di ' + namaPeriode(f.bulan) : 'semua tanggal';
+};
+/* semuaTgl: satu entri per ROMBONGAN (pesanan), supaya angka di pilihan
+   bulan menghitung rombongan, bukan baris tabel. */
+function kartuBerangkat(semuaTgl, id){
+  saringBerangkatAwal();
+  const hi = hariIniLokal(), f = S.brTgl;
+  const nHari = semuaTgl.filter(t => t === hi).length;
+  const per = {};
+  semuaTgl.forEach(t => { if (t){ const b = String(t).slice(0,7); per[b] = (per[b]||0) + 1; } });
+  const bulan = Object.keys(per);
+  if (!bulan.includes(periodeKini())) bulan.push(periodeKini());
+  bulan.sort().reverse();
+  return `<div class="card" style="padding-top:14px;padding-bottom:14px">
+    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+      <button type="button" class="btn${f.mode === 'hari' ? '' : ' ghost'}" id="${id}-hari"
+        style="white-space:nowrap">Hari ini &middot; ${tgl(hi + 'T00:00:00')}
+        <span class="pill ${nHari ? 'p-ok' : 'p-mute'}" style="margin-left:4px">${nHari}</span></button>
+      <div class="fld" style="margin:0;max-width:340px;flex:1;min-width:200px">
+        <label for="${id}-bulan">Bulan berangkat</label>
+        <select id="${id}-bulan">
+          ${f.mode === 'hari' ? '<option value="__hari" selected>Hari ini saja</option>' : ''}
+          ${bulan.map(b => `<option value="${esc(b)}" ${f.mode !== 'hari' && b === f.bulan ? 'selected' : ''}>${
+            esc(namaPeriode(b))}${per[b] ? ` &mdash; ${per[b]} rombongan` : ''}</option>`).join('')}
+          <option value="" ${f.mode !== 'hari' && !f.bulan ? 'selected' : ''}>Semua waktu</option>
+        </select>
+      </div>
+    </div>
+    <div class="hint" style="margin-top:8px">Disaring menurut <b>tanggal berangkat</b>,
+      bukan tanggal pesanan dibuat. Angka di tombol = rombongan yang berangkat hari ini.</div>
+  </div>`;
+}
+function pasangBerangkat(id, ulang){
+  const h = $(`${id}-hari`), b = $(`${id}-bulan`);
+  if (h) h.onclick = () => { S.brTgl = { mode:'hari' }; ulang(); };
+  if (b) b.onchange = e => {
+    if (e.target.value === '__hari') return;
+    S.brTgl = { mode:'bulan', bulan: e.target.value };
+    ulang();
+  };
+}
 
 /* Penyaring bulan. Dipakai dua tab, jadi dibuat sekali di sini. */
 function kartuPeriode(daftar, terpilih, idSel){
@@ -4471,7 +4547,7 @@ async function tabManifest(){
   if (!S.mfTgl) return tabBerangkat();
 
   const [{data:ord, error:e1}, {data:atur}] = await Promise.all([
-    DB.from('pesanan').select('kode,tipe,pax,anak,jml_naik,status,tanggal_berangkat,'
+    DB.from('pesanan').select('kode,tipe,pax,anak,jml_naik,status,tanggal_berangkat,dibuat,'
       + 'pemesan_nama,pemesan_hp,pemesan_alamat,biro_nama,biro_pic,'
       + 'produk(nama),kapal(nama)')
       .in('status',['paid','boarded']).order('tanggal_berangkat'),
@@ -4489,7 +4565,7 @@ async function tabManifest(){
   const naik = baris.reduce((a,o) => a + (o.jml_naik || 0), 0);
   const anak = baris.reduce((a,o) => a + (o.anak || 0), 0);
   const belumKapal = baris.filter(o => !o.kapal?.nama).length;
-  const hariIni = new Date().toISOString().slice(0,10);
+  const hariIni = hariIniLokal();   /* dulu toISOString() = UTC, meleset sebelum 07.00 WIB */
 
   $('isi').innerHTML = `
     <div class="papan-atas" style="margin-bottom:12px">
@@ -4512,8 +4588,8 @@ async function tabManifest(){
       <h3>Manifest ${esc(tglPanjang(S.mfTgl))}
         <span class="pill p-mute">${baris.length} rombongan</span></h3>
       <table data-papan="manifest">
-        <thead><tr><th class="nw">Berangkat</th><th class="nw">Kapal</th><th class="nw">Kode</th>
-          <th>Pemesan</th><th class="nw">WhatsApp</th><th class="nw">Produk</th>
+        <thead><tr><th class="nw">Berangkat</th><th class="nw">Dipesan</th><th class="nw">Kapal</th>
+          <th class="nw">Kode</th><th>Pemesan</th><th class="nw">WhatsApp</th><th class="nw">Produk</th>
           <th class="num">Orang</th><th class="num">Anak</th><th class="num">Naik</th>
           ${kol.alamat ? '<th>Alamat sesuai KTP</th>' : ''}
           <th class="nw">Status</th></tr></thead>
@@ -4526,6 +4602,8 @@ async function tabManifest(){
                 ? `${tgl(o.tanggal_berangkat)}${o.tanggal_berangkat === hariIni
                      ? ' <span class="pill p-ok">HARI INI</span>' : ''}`
                 : '<span style="color:var(--muted)">—</span>'}</td>
+            <td class="nw" style="color:var(--muted)" data-urut="${o.dibuat ? Date.parse(o.dibuat) : 0}">${
+              o.dibuat ? tgl(o.dibuat) : '—'}</td>
             <td class="nw">${o.kapal?.nama
               ? esc(o.kapal.nama) : '<span class="pill p-warn">belum</span>'}</td>
             <td class="mono nw">${esc(o.kode)}</td>
@@ -4549,7 +4627,7 @@ async function tabManifest(){
               o.pemesan_alamat ? esc(o.pemesan_alamat) : '<span style="color:var(--muted)">—</span>'
               }</span></td>` : ''}
             <td class="nw"><span class="pill ${st[1]}">${st[0]}</span></td></tr>`;
-        }).join('') : `<tr class="kosong"><td colspan="12"><div class="hint">
+        }).join('') : `<tr class="kosong"><td colspan="13"><div class="hint">
           Belum ada pesanan berstatus LUNAS atau SUDAH NAIK.</div></td></tr>`}</tbody>
       </table>
 
@@ -4578,10 +4656,11 @@ async function tabManifest(){
   lengkapiTabel('#isi table[data-papan="manifest"]', {
     id: 'manifest',
     petunjuk: 'Cari kode, pemesan, biro, atau produk…',
+    /* Indeks kolom bergeser +1 sejak kolom Dipesan disisipkan (12 Nov 2026). */
     saring: [
-      { kolom: 1, semua: 'Semua kapal',
+      { kolom: 2, semua: 'Semua kapal',
         pilihan: [...new Set(baris.map(o => o.kapal?.nama).filter(Boolean))] },
-      { kolom: 5, semua: 'Semua produk',
+      { kolom: 6, semua: 'Semua produk',
         pilihan: [...new Set(baris.map(o => o.produk?.nama).filter(Boolean))] }
     ]
   });
@@ -5379,7 +5458,11 @@ async function simpanKode(id, kodeLama, nama, inp, tutup){
 async function tabBerangkat(){
   const { data, error } = await DB.rpc('keberangkatan', { p_dari: null, p_sampai: null });
   if (error) return gagal(error);
-  const baris = data || [];
+  const semuaBaris = data || [];
+  saringBerangkatAwal();
+  /* KPI di bawah IKUT saringan (beda dengan Daftar): layar ini menjawab
+     "berapa yang berangkat di bulan ini", jadi angkanya harus bulan itu. */
+  const baris = semuaBaris.filter(b => lolosBerangkat(b.tanggal));
   /* SATU BARIS = satu tanggal DIKALI satu pelayaran, bukan satu tanggal.
      15 Nov yang punya 1 Day Journey dan Cruise Daily jadi DUA baris. KPI
      sebelumnya memakai baris.length dan menyebutnya "Tanggal berangkat" —
@@ -5402,10 +5485,12 @@ async function tabBerangkat(){
         <div class="v" style="color:${tot.belum?'var(--warn)':'var(--ok)'}">${tot.belum}</div>
         <div class="d">pesanan</div></div>
       ${`<div class="kpi"><div class="k">Nilai</div>
-        <div class="v">${rp(tot.omzet)}</div><div class="d">semua tanggal</div></div>`}
+        <div class="v">${rp(tot.omzet)}</div><div class="d">${esc(labelBerangkat())}</div></div>`}
     </div>
+    ${kartuBerangkat(semuaBaris.flatMap(b => Array(Number(b.jml_pesanan)||0).fill(b.tanggal)), 'mf')}
     <div class="card scrollx">
-      <h3>Tiket Terjual per Tanggal Keberangkatan</h3>
+      <h3>Tiket Terjual per Tanggal Keberangkatan
+        <span class="pill p-sea">${esc(labelBerangkat())}</span></h3>
       <div style="font-size:11.5px;color:var(--muted);margin-bottom:9px">Satu baris
         = satu tanggal untuk satu pelayaran. Tanggal yang punya dua pelayaran
         muncul dua baris.</div>
@@ -5426,7 +5511,7 @@ async function tabBerangkat(){
             ? `<span class="pill p-warn">${b.belum_kapal}</span>` : '<span class="pill p-ok">0</span>'}</td>
           ${`<td class="num nw">${rp(b.omzet)}</td>`}
         </tr>`).join('') : `<tr><td colspan="7"><div class="hint">
-          Belum ada pesanan yang punya tanggal keberangkatan.</div></td></tr>`}</tbody>
+          Tidak ada keberangkatan ${esc(labelBerangkat())}.</div></td></tr>`}</tbody>
       </table>
       <div class="note"><b>Klik barisnya untuk melihat siapa saja yang berangkat</b>
         Layar ini menjawab <b>berapa</b>: tanggal mana sudah ramai, berapa orang,
@@ -5455,6 +5540,7 @@ async function tabBerangkat(){
     S.mfTgl = tr.dataset.mfTgl;
     tabManifest();
   };
+  pasangBerangkat('mf', tabBerangkat);
 
   lengkapiTabel('#isi table[data-papan="berangkat"]', {
     id: 'berangkat', petunjuk: 'Cari tanggal atau pelayaran…',
@@ -5470,7 +5556,7 @@ async function tabKapal(){
        pernah dinonaktifkan tidak akan pernah bisa diaktifkan lagi dari layar. */
     DB.from('kapal').select('id,nama,kapasitas,aktif,urutan').order('urutan'),
     DB.from('pesanan')
-      .select('id,kode,pax,anak,status,tanggal_berangkat,kapal_id,pemesan_nama,tipe,produk:produk_id(nama)')
+      .select('id,kode,pax,anak,status,tanggal_berangkat,dibuat,kapal_id,pemesan_nama,tipe,produk:produk_id(nama)')
       .not('tanggal_berangkat','is',null)
       .in('status',['pending','waiting','paid','boarded'])
       .order('tanggal_berangkat')
@@ -5483,9 +5569,11 @@ async function tabKapal(){
 
   /* Dikelompokkan per tanggal: admin bekerja per keberangkatan, bukan per pesanan
      lepas. Kapasitas dihitung ulang tiap kali supaya langsung terlihat penuh/tidak. */
+  saringBerangkatAwal();
   const perTgl = {};
   (pes||[]).forEach(o => { (perTgl[o.tanggal_berangkat] ||= []).push(o); });
-  const tanggal = Object.keys(perTgl).sort();
+  /* Hanya tanggal yang lolos saringan Hari ini / Bulan berangkat yang digambar. */
+  const tanggal = Object.keys(perTgl).sort().filter(lolosBerangkat);
 
   const kelolaKapal = !bisaKelola() ? '' : `
     <div class="card" id="kartu-kapal">
@@ -5533,7 +5621,9 @@ async function tabKapal(){
         yang sudah terlanjur ditempatkan di situ tetap utuh beserta riwayatnya.</div>
     </div>`;
 
-  $('isi').innerHTML = kelolaKapal + (tanggal.length ? tanggal.map(tg => {
+  $('isi').innerHTML = kelolaKapal
+    + kartuBerangkat((pes||[]).map(o => o.tanggal_berangkat), 'kp')
+    + (tanggal.length ? tanggal.map(tg => {
     const daftar = perTgl[tg];
     const muat = {};
     S.kapal.forEach(k => muat[k.id] = daftar.filter(o=>o.kapal_id===k.id)
@@ -5565,12 +5655,14 @@ async function tabKapal(){
            tiap baris. -->
       <div class="scrollx">
       <table>
-        <thead><tr><th class="nw">Kode</th><th class="nw">Pemesan</th><th class="nw">Pelayaran</th>
+        <thead><tr><th class="nw">Kode</th><th class="nw">Dipesan</th><th class="nw">Pemesan</th><th class="nw">Pelayaran</th>
           <th class="num">Orang</th><th class="nw">Status</th><th class="nw">Kapal</th></tr></thead>
         <tbody>${daftar.map(o=>{
           const st = STATUS[o.status]||[o.status,'p-mute'];
           return `<tr>
             <td class="mono nw">${esc(o.kode)}</td>
+            <td class="nw" style="color:var(--muted)" data-urut="${o.dibuat ? Date.parse(o.dibuat) : 0}">${
+              o.dibuat ? tgl(o.dibuat) : '—'}</td>
             <td class="nw"><span class="nama" title="${esc(o.pemesan_nama)}">${esc(o.pemesan_nama)}</span>${
               o.tipe==='biro'?' <span class="pill p-sea">BIRO</span>':''}</td>
             <td class="nw">${esc(o.produk?.nama)}</td>
@@ -5591,11 +5683,13 @@ async function tabKapal(){
       juga bisa mengubah total yang dibayar. Jadi pembagian kapal dijalankan lewat
       jalur khusus yang cuma menyentuh kolom kapal, dan setiap perubahannya tercatat
       di catatan kegiatan.
-      Harga <b>katalog</b> memang bisa diubah Super Admin, Owner, dan Admin &mdash;
+      Harga <b>katalog</b> memang bisa diubah Super Admin dan Admin &mdash;
       tapi itu harga untuk pesanan berikutnya, bukan total pesanan yang sudah jadi.</div>`
-  : `<div class="card"><div class="note w"><b>Belum ada keberangkatan</b>
-      Belum ada pesanan sah yang punya tanggal keberangkatan. Tanggal baru
-      dikumpulkan dari pesanan yang masuk lewat halaman pemesanan versi terbaru.</div></div>`);
+  : `<div class="card"><div class="note w"><b>Tidak ada keberangkatan ${esc(labelBerangkat())}</b>
+      ${(pes||[]).length ? 'Pilih bulan lain atau <b>Semua waktu</b> di atas untuk melihat tanggal lainnya.'
+        : 'Belum ada pesanan sah yang punya tanggal keberangkatan. Tanggal baru '
+          + 'dikumpulkan dari pesanan yang masuk lewat halaman pemesanan versi terbaru.'}</div></div>`);
+  pasangBerangkat('kp', tabKapal);
 
   if (bisaKelola()){
     pasangKelolaKapal(kapalSemua || []);
@@ -7215,14 +7309,18 @@ async function tabKomisi(){
    ==================================================================== */
 async function tabBoarding(){
   const { data, error } = await DB.from('pesanan')
-    .select('kode,pax,anak,tipe,status,tanggal_berangkat,pemesan_nama,biro_nama,'
+    .select('kode,pax,anak,tipe,status,tanggal_berangkat,dibuat,pemesan_nama,biro_nama,'
           + 'jml_naik,deposit_jam,produk(nama),kapal(nama)')
     .in('status',['paid','boarded','waiting']).order('tanggal_berangkat');
   if (error) return gagal(error);
 
-  const baris = data || [];
-  const hariIni = new Date().toISOString().slice(0,10);
-  const hariIniBaris = baris.filter(o => o.tanggal_berangkat === hariIni);
+  const semua = data || [];
+  const hariIni = hariIniLokal();   /* dulu toISOString() = UTC, meleset sebelum 07.00 WIB */
+  const hariIniBaris = semua.filter(o => o.tanggal_berangkat === hariIni);
+  saringBerangkatAwal();
+  /* Tabel memakai baris yang lolos saringan tanggal; KPI "hari ini" tetap
+     dari semua baris supaya angkanya tidak ikut hilang saat bulan lain dipilih. */
+  const baris = semua.filter(o => lolosBerangkat(o.tanggal_berangkat));
   const bisaCatat = ['super','admin','boarding'].includes(S.peran);
 
   $('isi').innerHTML = `
@@ -7236,20 +7334,24 @@ async function tabBoarding(){
         <div class="v">${hariIniBaris.reduce((a,o)=>a+(o.jml_naik||0),0)}</div>
         <div class="d">dari ${hariIniBaris.reduce((a,o)=>a+(o.pax||0),0)} orang</div></div>
       <div class="kpi"><div class="k">Belum dapat kapal</div>
-        <div class="v" style="color:${baris.some(o=>!o.kapal?.nama)?'var(--warn)':'var(--ok)'}">${
-          baris.filter(o=>!o.kapal?.nama).length}</div>
+        <div class="v" style="color:${semua.some(o=>!o.kapal?.nama)?'var(--warn)':'var(--ok)'}">${
+          semua.filter(o=>!o.kapal?.nama).length}</div>
         <div class="d">semua tanggal</div></div>
     </div>
-    <div class="card scrollx"><h3>Daftar Boarding <span class="pill p-mute">${baris.length}</span></h3>
+    ${kartuBerangkat(semua.map(o => o.tanggal_berangkat), 'bd')}
+    <div class="card scrollx"><h3>Daftar Boarding <span class="pill p-mute">${baris.length}</span>
+      <span class="pill p-sea">${esc(labelBerangkat())}</span></h3>
       <table data-papan="boarding">
-        <thead><tr><th class="nw">Berangkat</th><th class="nw">Kapal</th><th class="nw">Kode</th>
-            <th>Pemesan</th><th class="nw">Produk</th><th class="num">Orang</th>
+        <thead><tr><th class="nw">Berangkat</th><th class="nw">Dipesan</th><th class="nw">Kapal</th>
+            <th class="nw">Kode</th><th>Pemesan</th><th class="nw">Produk</th><th class="num">Orang</th>
             <th class="nw">Naik</th><th class="nw">Status</th></tr></thead>
         <tbody>${baris.length ? baris.map(o => `<tr>
             <td class="nw" data-urut="${o.tanggal_berangkat?Date.parse(o.tanggal_berangkat):0}">${o.tanggal_berangkat
               ? `${tgl(o.tanggal_berangkat)}${o.tanggal_berangkat===hariIni
                    ? ' <span class="pill p-ok">HARI INI</span>' : ''}`
               : '<span style="color:var(--muted)">—</span>'}</td>
+            <td class="nw" style="color:var(--muted)" data-urut="${o.dibuat ? Date.parse(o.dibuat) : 0}">${
+              o.dibuat ? tgl(o.dibuat) : '—'}</td>
             <td class="nw">${o.kapal?.nama
               ? esc(o.kapal.nama) : '<span class="pill p-warn">belum</span>'}</td>
             <td class="mono nw">${esc(o.kode)}</td>
@@ -7263,12 +7365,13 @@ async function tabBoarding(){
                 data-urut="${o.jml_naik||0}">${selNaik(o, bisaCatat)}</td>
             <td class="nw"><span class="pill ${(STATUS[o.status]||['','p-mute'])[1]}">${
               (STATUS[o.status]||[o.status])[0]}</span></td>
-          </tr>`).join('') : `<tr class="kosong"><td colspan="8"><div class="hint">
-            Belum ada pesanan yang siap berangkat.</div></td></tr>`}</tbody>
+          </tr>`).join('') : `<tr class="kosong"><td colspan="9"><div class="hint">
+            Tidak ada rombongan yang berangkat ${esc(labelBerangkat())}.</div></td></tr>`}</tbody>
       </table>
 
       <div class="note"><b>Cara memakainya di dermaga</b>
-        Saring per kapal dulu lewat kotak di atas tabel, supaya yang tampil hanya
+        Tekan <b>Hari ini</b> di atas supaya yang tampil hanya rombongan yang berangkat
+        hari ini. Lalu saring per kapal lewat kotak di atas tabel, supaya yang tampil hanya
         rombongan kapal yang sedang dinaiki. Lalu untuk tiap baris, tekan
         <b>Semua naik</b> kalau rombongannya lengkap, atau <b>Ubah</b> untuk mengisi
         angkanya sendiri kalau ada yang tidak datang.</div>
@@ -7280,14 +7383,16 @@ async function tabBoarding(){
         terlanjur dipindahkan ke deposit, angkanya terkunci.</div>
     </div>`;
 
+  pasangBerangkat('bd', tabBoarding);
   if (bisaCatat) pasangCatatNaik();
   lengkapiTabel('#isi table[data-papan="boarding"]', {
     id: 'boarding', petunjuk: 'Cari kode, pemesan, atau biro…',
-    takUrut: [6],
+    /* Indeks kolom bergeser +1 sejak kolom Dipesan disisipkan (12 Nov 2026). */
+    takUrut: [7],
     saring: [
-      { kolom: 1, semua: 'Semua kapal',
+      { kolom: 2, semua: 'Semua kapal',
         pilihan: [...new Set(baris.map(o => o.kapal?.nama).filter(Boolean))] },
-      { kolom: 7, semua: 'Semua status',
+      { kolom: 8, semua: 'Semua status',
         pilihan: [...new Set(baris.map(o => (STATUS[o.status]||[o.status])[0]))] }
     ]
   });

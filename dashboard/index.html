@@ -796,6 +796,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-12i', 'Ekspor Data: kotak centang rata kiri, tidak lagi terdorong ke tengah'],
   ['2026-11-12h', 'Tab baru Ekspor Data: rekap bulanan ke Excel (ringkasan, pesanan, pembayaran, komisi agen, keberangkatan)'],
   ['2026-11-12g', 'Kolom Dipesan (tanggal pesanan dibuat) di Daftar boarding, Pembagian kapal, dan Manifest'],
   ['2026-11-12f', 'Keberangkatan: saringan Hari ini dan Bulan berangkat di Daftar, Pembagian kapal, dan Manifest'],
@@ -4708,9 +4709,12 @@ async function tabEkspor(){
       ${SHEET_EKSPOR.map(([k, judul, ket]) => `
         <label style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;
                border-bottom:1px solid var(--line);cursor:pointer">
+          <!-- width:auto WAJIB: aturan umum "input{width:100%}" membuat kotak
+               centang selebar baris dan mendorong tulisannya ke kanan.
+               Pola yang sama dipakai #pb-nego, #ag-biro, #pr-vou. -->
           <input type="checkbox" data-ek="${k}" ${S.eksporPilih[k] ? 'checked' : ''}
-                 style="margin-top:3px">
-          <span><b>${judul}</b><div class="hint">${ket}</div></span>
+                 style="width:auto;flex:none;margin-top:3px">
+          <span style="flex:1"><b>${judul}</b><div class="hint">${ket}</div></span>
         </label>`).join('')}
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px">
         <button type="button" class="btn" id="ek-unduh">Unduh Excel &middot; ${

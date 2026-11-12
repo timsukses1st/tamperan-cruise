@@ -795,6 +795,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-12b', 'Sisa tulisan NIK dan "nama penumpang diisi belakangan di Manifest" dihapus dari layar'],
   ['2026-11-12a', 'Tulisan komisi disesuaikan aturan Pak Dika: tarif dikunci saat pesanan lunas, pesanan lama tidak ikut naik'],
   ['2026-11-11i', 'Keterangan komisi ikut berubah saat pilihannya diganti; kolom Komisi agen diberi penunjuk geser'],
   ['2026-11-11h', 'Sisa kolom NIK dibersihkan dari Manifest; setelan mati "Hitungan tiket mulai nol lagi" dihapus'],
@@ -2410,7 +2411,7 @@ const TUTOR = {
       teks:'Tombol <b>Pesanan baru</b> membuka formulir harga nego: jumlah orang, harga '
          + 'per orang hasil kesepakatan, dan DP yang sudah masuk. Totalnya dihitung di '
          + 'layar supaya bisa dilihat dulu, tapi yang berlaku tetap hitungan database. '
-         + 'Nama penumpangnya terisi sementara dan diperbaiki belakangan di Manifest.' },
+         + 'Yang diisi cukup jumlah orangnya &mdash; nama penumpang satu per satu tidak dikumpulkan.' },
     { tab:'biro', cari:'#isi table[data-papan="mutasi"]', judul:'Mutasi deposit',
       teks:'Buku deposit ini <b>tambah saja</b>: barisnya tidak bisa diubah maupun dihapus '
          + 'oleh siapa pun yang login lewat dashboard. Salah catat diperbaiki dengan '
@@ -4158,7 +4159,7 @@ async function popPesananBiro(b){
     <div class="grid g2">
       <div class="fld"><label for="pb-pax">Jumlah orang</label>
         <input id="pb-pax" inputmode="numeric" maxlength="3" value="" placeholder="mis. 40">
-        <div class="hint">1&ndash;200. Nama penumpang boleh diisi belakangan di tab Manifest.</div></div>
+        <div class="hint">1&ndash;200. Cukup jumlahnya &mdash; nama penumpang satu per satu tidak dikumpulkan.</div></div>
       <div class="fld"><label for="pb-anak">Di antaranya anak</label>
         <input id="pb-anak" inputmode="numeric" maxlength="3" value="0">
         <div class="hint">Untuk pendataan saja, tidak mengubah harga.</div></div>
@@ -4318,8 +4319,7 @@ async function popPesananBiro(b){
     pesan(`Pesanan <b>${esc(r ? r.r_kode : '')}</b> dibuat untuk `
       + `<b>${esc(b.nama)}</b>. Total ${rp(r ? r.r_total : h.total)}`
       + (dp ? `, DP ${rp(r ? r.r_dibayar : dp)} tercatat, sisa ${rp(r ? r.r_sisa : h.total - dp)}.`
-            : ', belum ada uang masuk.')
-      + ' Nama penumpangnya terisi sementara &mdash; perbaiki di tab Manifest.', 14000);
+            : ', belum ada uang masuk.'), 14000);
     tabBiro();
   };
 }
@@ -7176,7 +7176,7 @@ async function tabKomisi(){
       </table>
       <div class="note"><b>Nomor lengkap, tapi hanya pelanggan sendiri</b>
         Kamu melihat nomor HP utuh supaya bisa follow up langsung. Pelanggan agen lain tidak pernah
-        muncul, dan NIK serta alamat KTP tidak pernah ditampilkan ke peran agen.</div>
+        muncul, dan alamat KTP pemesan tidak pernah ditampilkan ke peran agen.</div>
     </div>`;
 
   lengkapiTabel('#isi table[data-papan="pelangganku"]', {

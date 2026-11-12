@@ -199,10 +199,14 @@ tr.kosong td{color:var(--muted);font-size:13px;padding:16px 8px}
 #tblPanduan:hover{background:#27527d}
 .kode-in{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;width:148px;padding:3px 7px;
   border:1.5px solid var(--sea);border-radius:6px;text-transform:none}
-/* Nama orang/biro bisa panjang: potong dengan elipsis, jangan pernah pecah jadi dua baris.
-   Nama lengkap tetap bisa dibaca lewat atribut title saat disorot. */
-.nama{display:inline-block;max-width:135px;overflow:hidden;text-overflow:ellipsis;
-  white-space:nowrap;vertical-align:middle}
+/* Nama orang/biro/agen bisa panjang. 12 Nov 2026 (Kak Mer): TIDAK lagi dipotong
+   dengan "…" — teks yang terpotong menyembunyikan informasi (contohnya agen
+   "Pesanan Langsung (tanpa agen)" terbaca "Pesanan Langsung (…"). Sekarang
+   teks turun ke baris berikutnya di dalam lebar maksimumnya, jadi semuanya
+   terbaca tanpa membuat kolom melebar. white-space:normal sengaja menimpa
+   class "nw" di sel induknya. Dipakai 18 tempat; max-width per tempat tetap. */
+.nama{display:inline-block;max-width:180px;white-space:normal;overflow-wrap:anywhere;
+  line-height:1.35;vertical-align:middle}
 /* Tautan aksi di dalam sel: jangan pernah jadi tombol balok */
 /* Badge aksi: ukurannya kecil supaya tidak menaikkan tinggi baris, tapi punya
    latar berwarna supaya terbaca sebagai tombol — bukan teks biasa. */
@@ -257,10 +261,9 @@ input,select{width:100%;padding:9px 11px;border:1px solid var(--line);border-rad
              font:inherit;font-size:13.5px;background:#fff}
 input:focus,select:focus{outline:2px solid var(--sea);outline-offset:1px;border-color:var(--sea)}
 .hint{font-size:12px;color:var(--muted);margin-top:5px}
-/* Keterangan di BAWAH nama, bukan di sampingnya. .nama memaksa inline-block
-   (untuk memotong teks panjang dengan elipsis), jadi div.hint.nama ikut jadi
-   inline-block dan berdiri sebaris dengan namanya — alamat KTP di tab Pesanan
-   dan catatan biro keduanya kena. Elipsisnya tetap jalan sebagai block. */
+/* Keterangan di BAWAH nama, bukan di sampingnya. .nama memaksa inline-block,
+   jadi div.hint.nama ikut jadi inline-block dan berdiri sebaris dengan
+   namanya — alamat KTP di tab Pesanan dan catatan biro keduanya kena. */
 .hint.nama{display:block;margin-top:2px;line-height:1.35}
 .note{background:var(--sky);border-left:3px solid var(--sea);padding:11px 13px;border-radius:0 8px 8px 0;
       font-size:12.5px;margin:12px 0}
@@ -796,6 +799,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-12m', 'Teks panjang (agen, pembeli, alamat, biro, email) tidak lagi terpotong "…", turun ke baris berikutnya'],
   ['2026-11-12l', 'Kode unik 3 digit di belakang total pesanan, untuk mencocokkan transfer dengan mutasi rekening'],
   ['2026-11-12k', 'Data latihan: referensi pembayaran diseragamkan jadi <bank> LAT<nomor pesanan>, tidak lagi angka karangan'],
   ['2026-11-12j', 'Ekspor Data: berkas Excel dirapikan (judul, format rupiah & tanggal, warna status, baris total, jarak sel, siap cetak)'],

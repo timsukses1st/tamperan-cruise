@@ -803,6 +803,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-13b', 'Lencana HARI INI di semua daftar penumpang, plus kolom Berangkat di Pelanggan Saya (agen)'],
   ['2026-11-13a', 'Tab Deposit sendiri: saldo biro dan perorangan dalam satu tempat, beserta seluruh mutasinya'],
   ['2026-11-12n', 'Saldo deposit bisa dipakai untuk membayar pesanan, termasuk saldo atas nomor HP lain'],
   ['2026-11-12m', 'Teks panjang (agen, pembeli, alamat, biro, email) tidak lagi terpotong "…", turun ke baris berikutnya'],
@@ -2911,6 +2912,12 @@ const hariIniLokal = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 };
+/* Lencana HARI INI untuk tanggal keberangkatan (13 Nov 2026). Satu pintu,
+   supaya semua daftar penumpang menandai hari ini dengan cara yang sama dan
+   memakai jam lokal (WIB), bukan UTC. */
+const pillHariIni = t => t && String(t).slice(0, 10) === hariIniLokal()
+  ? ' <span class="pill p-ok">HARI INI</span>' : '';
+
 function saringBerangkatAwal(){
   if (S.brTgl === undefined)
     S.brTgl = S.peran === 'boarding' ? { mode:'hari' } : { mode:'bulan', bulan: periodeKini() };
@@ -3183,7 +3190,7 @@ async function tabPesanan(){
             <td class="mono nw">${esc(o.kode)}</td>
             <td class="nw" style="color:var(--muted)" data-urut="${Date.parse(o.dibuat)||0}">${tgl(o.dibuat)}</td>
             <td class="nw" data-urut="${o.tanggal_berangkat?Date.parse(o.tanggal_berangkat):0}">${o.tanggal_berangkat
-              ? `${tgl(o.tanggal_berangkat)}${o.kapal?.nama
+              ? `${tgl(o.tanggal_berangkat)}${pillHariIni(o.tanggal_berangkat)}${o.kapal?.nama
                    ? ` <span class="pill p-sea">${esc(o.kapal.nama.replace(/^Kapal\s*/i,'K'))}</span>`
                    : ' <span class="pill p-warn">belum</span>'}`
               : '<span style="color:var(--muted)">—</span>'}${aksiJadwal(o)}</td>
@@ -4827,7 +4834,7 @@ async function tabManifest(){
   $('isi').innerHTML = `
     <div class="papan-atas" style="margin-bottom:12px">
       <button type="button" class="btn ghost" id="mf-kembali">&larr; Semua tanggal</button>
-      <span style="font-weight:600">${esc(tglPanjang(S.mfTgl))}</span>
+      <span style="font-weight:600">${esc(tglPanjang(S.mfTgl))}${pillHariIni(S.mfTgl)}</span>
     </div>
     <div class="grid g4">
       <div class="kpi"><div class="k">Rombongan</div><div class="v">${baris.length}</div>
@@ -4842,7 +4849,7 @@ async function tabManifest(){
         <div class="d">life jacket ukuran anak</div></div>
     </div>
     <div class="card scrollx">
-      <h3>Manifest ${esc(tglPanjang(S.mfTgl))}
+      <h3>Manifest ${esc(tglPanjang(S.mfTgl))}${pillHariIni(S.mfTgl)}
         <span class="pill p-mute">${baris.length} rombongan</span></h3>
       <table data-papan="manifest">
         <thead><tr><th class="nw">Berangkat</th><th class="nw">Dipesan</th><th class="nw">Kapal</th>
@@ -4856,8 +4863,7 @@ async function tabManifest(){
           return `<tr>
             <td class="nw" data-urut="${o.tanggal_berangkat ? Date.parse(o.tanggal_berangkat) : 0}">${
               o.tanggal_berangkat
-                ? `${tgl(o.tanggal_berangkat)}${o.tanggal_berangkat === hariIni
-                     ? ' <span class="pill p-ok">HARI INI</span>' : ''}`
+                ? `${tgl(o.tanggal_berangkat)}${pillHariIni(o.tanggal_berangkat)}`
                 : '<span style="color:var(--muted)">—</span>'}</td>
             <td class="nw" style="color:var(--muted)" data-urut="${o.dibuat ? Date.parse(o.dibuat) : 0}">${
               o.dibuat ? tgl(o.dibuat) : '—'}</td>
@@ -6234,7 +6240,7 @@ async function tabBerangkat(){
           ${'<th class="num">Nilai</th>'}</tr></thead>
         <tbody>${baris.length ? baris.map(b=>`<tr data-mf-tgl="${esc(b.tanggal)}"
           style="cursor:pointer" title="Lihat daftar orang yang berangkat tanggal ini">
-          <td class="nw"><b>${tglPanjang(b.tanggal)}</b>
+          <td class="nw"><b>${tglPanjang(b.tanggal)}</b>${pillHariIni(b.tanggal)}
             <div class="hint">lihat daftarnya &rarr;</div></td>
           <td class="nw">${esc(b.produk)}</td>
           <td class="num">${b.jml_pesanan}</td>
@@ -6366,7 +6372,7 @@ async function tabKapal(){
 
     return `<div class="card scrollx">
       <div style="display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;margin-bottom:4px">
-        <h3 style="margin:0">${tglPanjang(tg)}</h3>
+        <h3 style="margin:0">${tglPanjang(tg)}${pillHariIni(tg)}</h3>
         ${belum.length
           ? `<span class="pill p-warn">${belum.length} pesanan · ${belumPax} orang belum berkapal</span>`
           : '<span class="pill p-ok">SEMUA SUDAH BERKAPAL</span>'}
@@ -7905,7 +7911,7 @@ async function tabKomisi(){
   const [{data:lb}, {data:semuaPesanan, error}, {data:prd}, {data:ta}] = await Promise.all([
     DB.rpc('papan_peringkat',{p_periode:per}),
     DB.from('pesanan')
-      .select('kode,pax,total,status,dibuat,agen_id,pemesan_nama,pemesan_hp,'
+      .select('kode,pax,total,status,dibuat,tanggal_berangkat,agen_id,pemesan_nama,pemesan_hp,'
             + 'komisi_persen,komisi_nominal,komisi_tiket_kumulatif,produk(nama)')
       .order('dibuat',{ascending:false}),
     DB.rpc('periode_pesanan'),
@@ -7990,13 +7996,17 @@ async function tabKomisi(){
     </div>
     <div class="card scrollx"><h3>Pelanggan Saya <span class="pill p-mute">${pesananku.length}</span></h3>
       <table data-papan="pelangganku">
-        <thead><tr><th class="nw">Kode</th><th class="nw">Tgl</th><th>Pembeli</th><th class="nw">WhatsApp</th>
+        <thead><tr><th class="nw">Kode</th><th class="nw">Dipesan</th><th class="nw">Berangkat</th>
+            <th>Pembeli</th><th class="nw">WhatsApp</th>
             <th class="nw">Produk</th><th class="num">Orang</th><th class="num">Total</th>
             <th class="num">Komisi</th><th class="nw">Status</th></tr></thead>
         <tbody>${pesananku.map(o=>{
           const st=STATUS[o.status]||[o.status,'p-mute'];
           return `<tr><td class="mono nw">${esc(o.kode)}</td>
-            <td class="nw" style="color:var(--muted)">${tgl(o.dibuat)}</td>
+            <td class="nw" style="color:var(--muted)" data-urut="${Date.parse(o.dibuat)||0}">${tgl(o.dibuat)}</td>
+            <td class="nw" data-urut="${o.tanggal_berangkat ? Date.parse(o.tanggal_berangkat) : 0}">${
+              o.tanggal_berangkat ? tgl(o.tanggal_berangkat) + pillHariIni(o.tanggal_berangkat)
+                                  : '<span style="color:var(--muted)">—</span>'}</td>
             <td class="nw"><span class="nama" title="${esc(o.pemesan_nama)}">${esc(o.pemesan_nama)}</span></td>
             <td class="nw">${selWa(o.pemesan_hp, `Halo ${o.pemesan_nama}, ini dari The Tamperan Cruise soal pesanan ${o.kode}.`)}</td>
             <td class="nw">${esc(o.produk?.nama)}</td><td class="num">${o.pax}</td>
@@ -8014,7 +8024,7 @@ async function tabKomisi(){
 
   lengkapiTabel('#isi table[data-papan="pelangganku"]', {
     id: 'pelangganku', petunjuk: 'Cari kode, pembeli, produk…',
-    saring: [{ kolom: 7, semua: 'Semua status',
+    saring: [{ kolom: 8, semua: 'Semua status',
                pilihan: [...new Set(pesananku.map(o => (STATUS[o.status]||[o.status])[0]))] }]
   });
 
@@ -8080,8 +8090,7 @@ async function tabBoarding(){
             <th class="nw">Naik</th><th class="nw">Status</th></tr></thead>
         <tbody>${baris.length ? baris.map(o => `<tr>
             <td class="nw" data-urut="${o.tanggal_berangkat?Date.parse(o.tanggal_berangkat):0}">${o.tanggal_berangkat
-              ? `${tgl(o.tanggal_berangkat)}${o.tanggal_berangkat===hariIni
-                   ? ' <span class="pill p-ok">HARI INI</span>' : ''}`
+              ? `${tgl(o.tanggal_berangkat)}${pillHariIni(o.tanggal_berangkat)}`
               : '<span style="color:var(--muted)">—</span>'}</td>
             <td class="nw" style="color:var(--muted)" data-urut="${o.dibuat ? Date.parse(o.dibuat) : 0}">${
               o.dibuat ? tgl(o.dibuat) : '—'}</td>

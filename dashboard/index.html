@@ -811,6 +811,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-13d', 'Kotak bayar pakai saldo deposit langsung terbuka di Catat bayar, tanpa klik selengkapnya'],
   ['2026-11-13c', 'Lencana di samping nama tidak lagi menembus garis kolom; nomor HP selalu tampil berawalan 0'],
   ['2026-11-13b', 'Lencana HARI INI di semua daftar penumpang, plus kolom Berangkat di Pelanggan Saya (agen)'],
   ['2026-11-13a', 'Tab Deposit sendiri: saldo biro dan perorangan dalam satu tempat, beserta seluruh mutasinya'],
@@ -3774,19 +3775,20 @@ async function popBayar(kode, muatUlang){
       : '<div class="note" style="margin-bottom:14px"><b>Belum ada uang masuk</b>Pesanan ini belum pernah dicatat pembayarannya.</div>'}
 
     ${bolehCatat ? `
-      <div class="note" id="dp-saldo-kotak" style="margin:0 0 14px">
-        <b>Bayar pakai saldo deposit</b>
-        <div id="dp-saldo-isi"></div>
-        <details style="margin-top:8px"><summary style="cursor:pointer;font-size:12.5px">
-          Pakai saldo atas nomor HP lain</summary>
-          <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+      <!-- Sengaja BUKAN .note: semua .note otomatis dilipat jadi "selengkapnya",
+           padahal kotak ini tombol kerja yang harus langsung terlihat (13 Nov 2026). -->
+      <div id="dp-saldo-kotak" style="margin:0 0 16px;padding:12px 14px;border-radius:10px;
+           border:1.5px solid var(--line);background:#f8fafc">
+        <div id="dp-saldo-isi"><span class="spin"></span></div>
+        <div id="dp-hp-baris" class="hide" style="margin-top:10px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
             <input id="dp-hp-lain" inputmode="tel" maxlength="16" autocomplete="off"
-                   placeholder="mis. 0812xxxxxxx" style="max-width:200px">
+                   placeholder="Nomor HP lain, mis. 0812xxxxxxx" style="max-width:240px">
             <button type="button" class="btn ghost" id="dp-cek-hp">Cek saldo</button>
           </div>
           <div class="hint">Untuk pelanggan yang dulu memesan dengan nomor lain.
-            Pastikan pemilik nomor itu memang setuju saldonya dipakai.</div>
-        </details>
+            Pastikan pemilik nomor itu setuju saldonya dipakai.</div>
+        </div>
       </div>
       <div class="grid g2" style="margin-bottom:0">
         <div class="fld"><label for="by-nominal">Jumlah uang diterima</label>
@@ -3824,25 +3826,34 @@ async function popBayar(kode, muatUlang){
   /* ---- Bayar pakai saldo deposit (12 Nov 2026) ---- */
   let hpLain = null;
   const gambarSaldo = sd => {
-    const isi = q('#dp-saldo-isi');
-    if (!sd){ isi.innerHTML = '<div class="hint">Saldo tidak terbaca.</div>'; return; }
-    const pemilik = sd.r_jenis === 'biro' ? `biro <b>${esc(sd.r_pemilik)}</b>`
-                                          : `nomor HP <b class="mono">${esc(sd.r_pemilik)}</b>`;
+    const isi = q('#dp-saldo-isi'), kotak = q('#dp-saldo-kotak');
+    const tautLain = `<a href="#" id="dp-lain" style="font-size:12.5px;color:var(--sea)">Pakai saldo nomor HP lain</a>`;
+    const pasangLain = () => { const t = q('#dp-lain'); if (t) t.onclick = e => {
+      e.preventDefault(); q('#dp-hp-baris').classList.remove('hide'); q('#dp-hp-lain').focus(); }; };
+    if (!sd){ isi.innerHTML = `<div class="hint">Saldo deposit tidak terbaca. ${tautLain}</div>`; pasangLain(); return; }
+    const pemilik = sd.r_jenis === 'biro' ? esc(sd.r_pemilik)
+                                          : `nomor <span class="mono">${esc(fmtHp(sd.r_pemilik))}</span>`;
     if (!(sd.r_saldo > 0)){
-      isi.innerHTML = `<div class="hint" style="margin-top:4px">Saldo ${pemilik}: <b>Rp0</b>.
-        Tidak ada saldo yang bisa dipakai.</div>`;
-      return;
+      kotak.style.borderColor = 'var(--line)'; kotak.style.background = '#f8fafc';
+      isi.innerHTML = `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:13px">
+        <span style="color:var(--muted)">Saldo deposit ${pemilik}: <b>Rp0</b></span>${tautLain}</div>`;
+      pasangLain(); return;
     }
     const pakai = Math.min(sd.r_saldo, r.r_sisa);
+    kotak.style.borderColor = 'var(--ok)'; kotak.style.background = '#effaf3';
     isi.innerHTML = `
-      <div style="margin:6px 0">Saldo ${pemilik}: <b style="color:var(--ok)">${rp(sd.r_saldo)}</b></div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <input id="dp-pakai" inputmode="numeric" autocomplete="off" value="${pakai}" style="max-width:160px">
-        <button type="button" class="btn" id="dp-pakai-btn">Pakai saldo</button>
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline">
+        <div style="font-weight:700">Ada saldo deposit ${pemilik}</div>
+        <div style="font-size:18px;font-weight:800;color:var(--ok)">${rp(sd.r_saldo)}</div>
       </div>
-      <div class="hint">Maksimal ${rp(pakai)} (saldo atau sisa tagihan, mana yang lebih kecil).
-        Saldo langsung berkurang dan tercatat di Mutasi Deposit. Tidak bisa dibatalkan,
-        salah pakai diperbaiki dengan mutasi penyeimbang.</div>`;
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+        <input id="dp-pakai" inputmode="numeric" autocomplete="off" value="${pakai}" style="max-width:170px">
+        <button type="button" class="btn" id="dp-pakai-btn">Bayar pakai saldo</button>
+        ${tautLain}
+      </div>
+      <div class="hint">Maksimal ${rp(pakai)}. Saldo langsung berkurang dan tercatat di tab Deposit,
+        tidak bisa dibatalkan. Kalau saldo kurang dari tagihan, sisanya dicatat lewat formulir di bawah.</div>`;
+    pasangLain();
     q('#dp-pakai-btn').onclick = async () => {
       const n = angkaRp(q('#dp-pakai').value);
       if (n === null || n <= 0) return pesan('Jumlah saldo harus angka lebih dari nol.', 7000);
@@ -3852,7 +3863,7 @@ async function popBayar(kode, muatUlang){
       const { data, error } = await DB.rpc('bayar_pakai_deposit', {
         p_kode: kode, p_nominal: n, p_hp_lain: hpLain,
         p_catatan: (q('#by-cat').value || '').trim() || null });
-      if (error){ btn.disabled = false; btn.textContent = 'Pakai saldo'; return gagalPesan(error); }
+      if (error){ btn.disabled = false; btn.textContent = 'Bayar pakai saldo'; return gagalPesan(error); }
       const h = Array.isArray(data) ? data[0] : data;
       tutup();
       pesan(`${rp(n)} dibayar dari saldo deposit untuk <b>${esc(kode)}</b>. `

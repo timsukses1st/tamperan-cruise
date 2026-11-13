@@ -727,7 +727,11 @@ function menuPeran(peran){
           Dia masuk langsung ke sub-tampilan "Daftar". */
        : peran==='boarding' ? [['berangkat','Keberangkatan']]
        : [['ringkas','Ringkasan'],['pesanan','Pesanan'],['berangkat','Keberangkatan'],
-          ['biro','Biro & Deposit'],
+          ['biro','Biro'],
+          /* 13 Nov 2026 — Deposit dipisah dari tab Biro atas permintaan Kak Mer.
+             Saldo perorangan (atas nomor HP) dulu ikut nyempil di tab Biro,
+             padahal tidak ada hubungannya dengan biro. Sekarang satu tempat. */
+          ['deposit','Deposit'],
           ['agen','Agen & Kode'],
           ['atur','Pengaturan'],
           ['ekspor','Ekspor Data'],
@@ -799,6 +803,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-13a', 'Tab Deposit sendiri: saldo biro dan perorangan dalam satu tempat, beserta seluruh mutasinya'],
   ['2026-11-12n', 'Saldo deposit bisa dipakai untuk membayar pesanan, termasuk saldo atas nomor HP lain'],
   ['2026-11-12m', 'Teks panjang (agen, pembeli, alamat, biro, email) tidak lagi terpotong "…", turun ke baris berikutnya'],
   ['2026-11-12l', 'Kode unik 3 digit di belakang total pesanan, untuk mencocokkan transfer dengan mutasi rekening'],
@@ -922,7 +927,7 @@ const LAYAR = {
      berarti ada layar yang terdaftar tapi tidak punya pintu, dan pemeriksa
      navigasi memang menangkapnya. */
   kapal:tabKapal, voucher:tabVoucher,
-  biro:tabBiro, akses:tabAkses, galeri:tabGaleri, ekspor:tabEkspor,
+  biro:tabBiro, deposit:tabDeposit, akses:tabAkses, galeri:tabGaleri, ekspor:tabEkspor,
 };
 
 function buka(tab, sub){
@@ -1504,7 +1509,7 @@ function dataLatihan(){
       { id:'d2', biro_id:BR.anugerah, pemesan_hp:null, pesanan_id:null, arah:'keluar',
         nominal:780000, waktu:JAM(200), aktor_nama:'Dika Kurniawan',
         catatan:'Dipakai sebagai potongan rombongan berikutnya.' },
-      { id:'d3', biro_id:null, pemesan_hp:'81312345678', pesanan_id:null, arah:'masuk',
+      { id:'d3', biro_id:null, pemesan_hp:'81200000002', pesanan_id:null, arah:'masuk',
         nominal:300000, waktu:JAM(150), aktor_nama:'Dika Kurniawan',
         catatan:'2 orang tidak naik di pesanan perorangan. Saldo atas nama nomor HP.' },
     ],
@@ -2553,7 +2558,7 @@ const TUTOR = {
     { tab:'agen', cari:'#isi [data-sel-wa]', judul:'Agen & Kode',
       teks:'Nomor WhatsApp di sini menentukan ke mana pelanggan diarahkan setelah memesan. '
          + 'Perubahannya langsung berlaku di situs, tanpa perlu apa-apa lagi.' },
-    { tab:'biro', cari:'#isi #kartu-biro-baru', judul:'Biro & Deposit',
+    { tab:'biro', cari:'#isi #kartu-biro-baru', judul:'Biro',
       teks:'Biro berbeda dari agen: agen membawa pelanggan lewat kode referral dan dapat '
          + 'komisi, biro memesan rombongan langsung lewat Anda dengan harga nego dan '
          + '<b>tanpa komisi</b>. Nama PIC dan nomor WA wajib &mdash; tanpa itu pesanan '
@@ -2564,7 +2569,11 @@ const TUTOR = {
          + 'per orang hasil kesepakatan, dan DP yang sudah masuk. Totalnya dihitung di '
          + 'layar supaya bisa dilihat dulu, tapi yang berlaku tetap hitungan database. '
          + 'Yang diisi cukup jumlah orangnya &mdash; nama penumpang satu per satu tidak dikumpulkan.' },
-    { tab:'biro', cari:'#isi table[data-papan="mutasi"]', judul:'Mutasi deposit',
+    { tab:'deposit', cari:'#isi table[data-papan="saldo"]', judul:'Deposit',
+      teks:'Semua saldo deposit ada di sini, <b>biro maupun perorangan</b>. Saldo biro '
+         + 'atas nama birónya, saldo perorangan atas nama nomor HP pemesan. Saldo ini '
+         + 'bisa dipakai membayar pesanan lewat tombol <b>Pakai saldo</b> di Catat bayar.' },
+    { tab:'deposit', cari:'#isi table[data-papan="mutasi"]', judul:'Mutasi deposit',
       teks:'Buku deposit ini <b>tambah saja</b>: barisnya tidak bisa diubah maupun dihapus '
          + 'oleh siapa pun yang login lewat dashboard. Salah catat diperbaiki dengan '
          + 'mutasi penyeimbang, bukan dengan menghapus jejaknya. Saldo di tabel atas '
@@ -4050,9 +4059,9 @@ const fmtHp = hp => {
 async function tabBiro(){
   const [{ data: biro, error: e1 }, { data: mut }, { data: pes }] = await Promise.all([
     DB.from('biro').select('id,nama,pic,pic_wa,diskon_persen,catatan,aktif,dibuat').order('nama'),
-    DB.from('deposit_mutasi')
-      .select('id,biro_id,pemesan_hp,pesanan_id,arah,nominal,catatan,aktor_nama,waktu')
-      .order('waktu', { ascending: false }).limit(200),
+    /* Tanpa limit: saldo dijumlahkan dari SELURUH mutasi. Dulu dibatasi 200
+       baris, artinya saldo bisa salah begitu mutasinya lewat 200. */
+    DB.from('deposit_mutasi').select('biro_id,arah,nominal'),
     DB.from('pesanan').select('biro_id,total,status'),
   ]);
   if (e1) return gagal(e1);
@@ -4069,12 +4078,6 @@ async function tabBiro(){
     if (!m.biro_id) return;
     saldoBiro[m.biro_id] = (saldoBiro[m.biro_id] || 0) + (m.arah === 'masuk' ? m.nominal : -m.nominal);
   });
-  /* Deposit atas nama nomor HP (pesanan perorangan) dikelompokkan sendiri. */
-  const saldoHp = {};
-  mutasi.forEach(m => {
-    if (!m.pemesan_hp) return;
-    saldoHp[m.pemesan_hp] = (saldoHp[m.pemesan_hp] || 0) + (m.arah === 'masuk' ? m.nominal : -m.nominal);
-  });
 
   const hitung = {};
   (pes || []).forEach(o => {
@@ -4085,20 +4088,19 @@ async function tabBiro(){
   });
 
   const bisa      = bisaDeposit();
-  const totalSaldo = Object.values(saldoBiro).reduce((a, b) => a + b, 0)
-                   + Object.values(saldoHp).reduce((a, b) => a + b, 0);
-  const namaBiro = id => (daftar.find(b => b.id === id) || {}).nama;
+  const totalSaldo = Object.values(saldoBiro).reduce((a, b) => a + b, 0);
 
   $('isi').innerHTML = `
     <div class="grid g4">
       <div class="kpi"><div class="k">Biro terdaftar</div>
         <div class="v">${daftar.filter(b => b.aktif).length}</div>
         <div class="d">${daftar.length} termasuk nonaktif</div></div>
-      <div class="kpi"><div class="k">Saldo deposit</div>
+      <div class="kpi"><div class="k">Saldo deposit biro</div>
         <div class="v" style="color:${totalSaldo ? 'var(--sea)' : 'inherit'}">${rp(totalSaldo)}</div>
-        <div class="d">semua pemilik saldo</div></div>
-      <div class="kpi"><div class="k">Mutasi tercatat</div><div class="v">${mutasi.length}</div>
-        <div class="d">200 terbaru</div></div>
+        <div class="d">rincian di tab Deposit</div></div>
+      <div class="kpi"><div class="k">Biro bersaldo</div>
+        <div class="v">${Object.values(saldoBiro).filter(v => v > 0).length}</div>
+        <div class="d">saldo lebih dari Rp0</div></div>
       <div class="kpi"><div class="k">Pesanan lewat biro</div>
         <div class="v">${Object.values(hitung).reduce((a, b) => a + b.n, 0)}</div>
         <div class="d">sepanjang waktu</div></div>
@@ -4180,50 +4182,11 @@ async function tabBiro(){
         riwayatnya.</div>
     </div>
 
-    ${Object.keys(saldoHp).length ? `<div class="card scrollx">
-      <h3>Saldo Deposit atas Nama Nomor HP
-        <span class="pill p-mute">${Object.keys(saldoHp).length}</span></h3>
-      <table data-papan="dephp">
-        <thead><tr><th class="nw">Nomor</th><th class="num">Saldo</th></tr></thead>
-        <tbody>${Object.entries(saldoHp).map(([hp, s]) => `<tr>
-          <td class="nw">${selWa(hp, 'Halo, ini dari The Tamperan Cruise soal saldo deposit Anda.')}</td>
-          <td class="num nw" data-urut="${s}"><b>${rp(s)}</b></td></tr>`).join('')}
-        </tbody></table>
-      <div class="note"><b>Dari pesanan perorangan</b>
-        Pesanan yang bukan pesanan biro saldonya dicatat atas nama nomor HP
-        pemesan, karena tidak ada badan yang bisa dijadikan pemiliknya.</div>
-    </div>` : ''}
+    <div class="note"><b>Deposit ada di tab sendiri</b>
+      Saldo semua biro dan perorangan, beserta riwayat mutasinya, sekarang ada di tab
+      <a href="#" id="ke-deposit">Deposit</a>.</div>`;
 
-    <div class="card scrollx">
-      <h3>Mutasi Deposit <span class="pill p-mute">${mutasi.length}</span></h3>
-      <table data-papan="mutasi">
-        <thead><tr><th class="nw">Waktu</th><th class="nw">Pemilik saldo</th>
-          <th class="nw">Arah</th><th class="num">Jumlah</th>
-          <th>Keterangan</th><th class="nw">Dicatat oleh</th></tr></thead>
-        <tbody>${mutasi.length ? mutasi.map(m => `<tr>
-          <td class="nw" style="color:var(--muted)"
-              data-urut="${Date.parse(m.waktu) || 0}">${tgl(m.waktu)}</td>
-          <td class="nw">${m.biro_id
-            ? `<b class="nama" title="${esc(namaBiro(m.biro_id) || '')}">${
-                 esc(namaBiro(m.biro_id) || 'biro terhapus')}</b>`
-            : `<span class="mono" style="font-size:12px">${esc(fmtHp(m.pemesan_hp))}</span>`}</td>
-          <td class="nw">${m.arah === 'masuk'
-            ? '<span class="pill p-ok">MASUK</span>'
-            : '<span class="pill p-warn">KELUAR</span>'}</td>
-          <td class="num nw" data-urut="${m.arah === 'masuk' ? m.nominal : -m.nominal}">${
-            m.arah === 'masuk' ? '+' : '&minus;'}${rp(m.nominal)}</td>
-          <td><span class="nama" style="max-width:380px"
-              title="${esc(m.catatan || '')}">${esc(m.catatan || '—')}</span></td>
-          <td class="nw">${esc(m.aktor_nama || '—')}</td>
-        </tr>`).join('') : `<tr class="kosong"><td colspan="6"><div class="hint">
-          Belum ada mutasi deposit.</div></td></tr>`}</tbody>
-      </table>
-      <div class="note"><b>Buku tambah saja</b>
-        Baris mutasi tidak bisa diubah maupun dihapus &mdash; database memang tidak
-        memberi izin itu ke siapa pun yang login lewat dashboard. Salah catat
-        diperbaiki dengan mutasi penyeimbang, supaya jejaknya tetap utuh.</div>
-    </div>`;
-
+  $('ke-deposit').onclick = e => { e.preventDefault(); buka('deposit'); };
   if (bisa){
     pasangTambahBiro(daftar);
     pasangKelolaBiro(daftar);
@@ -4232,9 +4195,139 @@ async function tabBiro(){
     id: 'biro', takUrut: [7], petunjuk: 'Cari nama biro atau PIC…',
     saring: [{ kolom: 6, semua: 'Semua status', pilihan: ['AKTIF','NONAKTIF'] }]
   });
+}
+
+/* ====================================================================
+   TAB DEPOSIT (13 Nov 2026)
+   Satu tempat untuk SEMUA saldo deposit: milik biro (kunci biro_id) dan
+   milik perorangan (kunci nomor HP polos, hasil hp_polos()). Saldo tetap
+   DIHITUNG dari seluruh mutasi, bukan dibaca dari kolom tersimpan.
+   Nama perorangan diambil dari pesanan terbaru dengan nomor HP yang sama,
+   hanya untuk memudahkan membaca; pemilik saldonya tetap nomor HP itu.
+   ==================================================================== */
+async function tabDeposit(){
+  const [{ data: mut, error: e1 }, { data: biro }, { data: pes }] = await Promise.all([
+    DB.from('deposit_mutasi')
+      .select('id,biro_id,pemesan_hp,pesanan_id,arah,nominal,catatan,aktor_nama,waktu')
+      .order('waktu', { ascending: false }),
+    DB.from('biro').select('id,nama,pic,pic_wa'),
+    DB.from('pesanan').select('id,kode,biro_id,pemesan_nama,pemesan_hp,dibuat')
+      .order('dibuat', { ascending: false }),
+  ]);
+  if (e1) return gagal(e1);
+  const mutasi = mut || [];
+  const daftarBiro = biro || [];
+  const kodePes = Object.fromEntries((pes || []).map(o => [o.id, o.kode]));
+  /* pesanan sudah urut terbaru dulu, jadi nama pertama yang ketemu = terbaru */
+  const namaHp = {};
+  (pes || []).forEach(o => {
+    if (o.biro_id) return;
+    const h = hpPolos(o.pemesan_hp);
+    if (h && !namaHp[h]) namaHp[h] = o.pemesan_nama;
+  });
+
+  const pemilik = {};
+  mutasi.forEach(m => {
+    const kunci = m.biro_id ? 'b:' + m.biro_id : 'h:' + m.pemesan_hp;
+    const g = pemilik[kunci] ||= {
+      jenis: m.biro_id ? 'biro' : 'hp', biro_id: m.biro_id, hp: m.pemesan_hp,
+      masuk: 0, keluar: 0, terakhir: m.waktu, n: 0 };
+    if (m.arah === 'masuk') g.masuk += m.nominal; else g.keluar += m.nominal;
+    g.n++;
+    if (String(m.waktu) > String(g.terakhir)) g.terakhir = m.waktu;
+  });
+  const baris = Object.values(pemilik).map(g => {
+    const b = g.biro_id ? daftarBiro.find(x => x.id === g.biro_id) : null;
+    return { ...g, saldo: g.masuk - g.keluar,
+      nama: g.jenis === 'biro' ? (b ? b.nama : 'biro terhapus') : (namaHp[g.hp] || 'tanpa nama'),
+      wa: g.jenis === 'biro' ? (b && b.pic_wa) : g.hp };
+  }).sort((a, b) => b.saldo - a.saldo);
+
+  const jml = (f) => baris.filter(f).reduce((a, g) => a + g.saldo, 0);
+  const sBiro = jml(g => g.jenis === 'biro'), sHp = jml(g => g.jenis === 'hp');
+  const labelPemilik = m => {
+    if (m.biro_id){
+      const b = daftarBiro.find(x => x.id === m.biro_id);
+      return `<b class="nama">${esc(b ? b.nama : 'biro terhapus')}</b>`;
+    }
+    return `<b class="nama">${esc(namaHp[m.pemesan_hp] || 'tanpa nama')}</b>
+      <div class="mono" style="font-size:11.5px;color:var(--muted)">${esc(fmtHp(m.pemesan_hp))}</div>`;
+  };
+  const pillJenis = j => j === 'biro' ? '<span class="pill p-sea">BIRO</span>'
+                                      : '<span class="pill p-mute">PERORANGAN</span>';
+
+  $('isi').innerHTML = `
+    <div class="grid g4">
+      <div class="kpi"><div class="k">Total saldo deposit</div>
+        <div class="v" style="color:${sBiro + sHp ? 'var(--sea)' : 'inherit'}">${rp(sBiro + sHp)}</div>
+        <div class="d">biro + perorangan</div></div>
+      <div class="kpi"><div class="k">Saldo biro</div><div class="v">${rp(sBiro)}</div>
+        <div class="d">${baris.filter(g => g.jenis === 'biro' && g.saldo > 0).length} biro bersaldo</div></div>
+      <div class="kpi"><div class="k">Saldo perorangan</div><div class="v">${rp(sHp)}</div>
+        <div class="d">${baris.filter(g => g.jenis === 'hp' && g.saldo > 0).length} nomor HP bersaldo</div></div>
+      <div class="kpi"><div class="k">Mutasi tercatat</div><div class="v">${mutasi.length}</div>
+        <div class="d">sepanjang waktu</div></div>
+    </div>
+
+    <div class="card scrollx">
+      <h3>Saldo per Pemilik <span class="pill p-mute">${baris.length}</span></h3>
+      <table data-papan="saldo">
+        <thead><tr><th class="nw">Pemilik saldo</th><th class="nw">Jenis</th>
+          <th class="num">Masuk</th><th class="num">Terpakai</th><th class="num">Saldo</th>
+          <th class="nw">Mutasi terakhir</th><th class="nw">WhatsApp</th></tr></thead>
+        <tbody>${baris.length ? baris.map(g => `<tr>
+          <td class="nw">${g.jenis === 'biro' ? `<b class="nama">${esc(g.nama)}</b>`
+            : `<b class="nama">${esc(g.nama)}</b><div class="mono" style="font-size:11.5px;color:var(--muted)">${esc(fmtHp(g.hp))}</div>`}</td>
+          <td class="nw">${pillJenis(g.jenis)}</td>
+          <td class="num nw" data-urut="${g.masuk}">${rp(g.masuk)}</td>
+          <td class="num nw" data-urut="${g.keluar}">${g.keluar ? rp(g.keluar) : '<span style="color:var(--muted)">Rp0</span>'}</td>
+          <td class="num nw" data-urut="${g.saldo}">${g.saldo > 0
+            ? `<b style="color:var(--sea)">${rp(g.saldo)}</b>` : `<span style="color:var(--muted)">${rp(g.saldo)}</span>`}</td>
+          <td class="nw" style="color:var(--muted)" data-urut="${Date.parse(g.terakhir) || 0}">${tgl(g.terakhir)}</td>
+          <td class="nw">${selWa(g.wa, 'Halo, ini dari The Tamperan Cruise soal saldo deposit Anda.')}</td>
+        </tr>`).join('') : `<tr class="kosong"><td colspan="7"><div class="hint">
+          Belum ada saldo deposit.</div></td></tr>`}</tbody>
+      </table>
+      <div class="note"><b>Siapa pemilik saldonya?</b>
+        Pesanan biro: saldonya milik biro. Pesanan perorangan: saldonya milik
+        <b>nomor HP pemesan</b> (nama di atas diambil dari pesanan terbarunya, hanya
+        untuk memudahkan). Saldo dipakai lewat tombol <b>Pakai saldo</b> di Catat bayar.</div>
+    </div>
+
+    <div class="card scrollx">
+      <h3>Mutasi Deposit <span class="pill p-mute">${mutasi.length}</span></h3>
+      <table data-papan="mutasi">
+        <thead><tr><th class="nw">Waktu</th><th class="nw">Pemilik saldo</th><th class="nw">Jenis</th>
+          <th class="nw">Arah</th><th class="num">Jumlah</th><th class="nw">Pesanan</th>
+          <th>Keterangan</th><th class="nw">Dicatat oleh</th></tr></thead>
+        <tbody>${mutasi.length ? mutasi.map(m => `<tr>
+          <td class="nw" style="color:var(--muted)" data-urut="${Date.parse(m.waktu) || 0}">${tgl(m.waktu)}</td>
+          <td class="nw">${labelPemilik(m)}</td>
+          <td class="nw">${pillJenis(m.biro_id ? 'biro' : 'hp')}</td>
+          <td class="nw">${m.arah === 'masuk'
+            ? '<span class="pill p-ok">MASUK</span>' : '<span class="pill p-warn">KELUAR</span>'}</td>
+          <td class="num nw" data-urut="${m.arah === 'masuk' ? m.nominal : -m.nominal}">${
+            m.arah === 'masuk' ? '+' : '&minus;'}${rp(m.nominal)}</td>
+          <td class="nw mono" style="font-size:12px">${esc(kodePes[m.pesanan_id] || '—')}</td>
+          <td><span class="nama" style="max-width:380px"
+              title="${esc(m.catatan || '')}">${esc(m.catatan || '—')}</span></td>
+          <td class="nw">${esc(m.aktor_nama || '—')}</td>
+        </tr>`).join('') : `<tr class="kosong"><td colspan="8"><div class="hint">
+          Belum ada mutasi deposit.</div></td></tr>`}</tbody>
+      </table>
+      <div class="note"><b>Buku tambah saja</b>
+        Baris mutasi tidak bisa diubah maupun dihapus. Salah catat diperbaiki
+        dengan mutasi penyeimbang, supaya jejak uangnya tetap utuh.</div>
+    </div>`;
+
+  lengkapiTabel('#isi table[data-papan="saldo"]', {
+    id: 'saldo', takUrut: [6], petunjuk: 'Cari nama biro, nama pemesan, atau nomor HP…',
+    saring: [{ kolom: 1, semua: 'Biro & perorangan', pilihan: ['BIRO','PERORANGAN'] }]
+  });
   lengkapiTabel('#isi table[data-papan="mutasi"]', {
-    id: 'mutasi', petunjuk: 'Cari pemilik saldo atau keterangan…',
-    saring: [{ kolom: 2, semua: 'Masuk & keluar', pilihan: ['MASUK','KELUAR'] }]
+    id: 'mutasi', petunjuk: 'Cari pemilik, kode pesanan, atau keterangan…',
+    saring: [{ kolom: 2, semua: 'Biro & perorangan', pilihan: ['BIRO','PERORANGAN'] },
+             { kolom: 3, semua: 'Masuk & keluar', pilihan: ['MASUK','KELUAR'] }]
   });
 }
 

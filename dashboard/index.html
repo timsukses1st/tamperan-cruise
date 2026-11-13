@@ -205,8 +205,16 @@ tr.kosong td{color:var(--muted);font-size:13px;padding:16px 8px}
    teks turun ke baris berikutnya di dalam lebar maksimumnya, jadi semuanya
    terbaca tanpa membuat kolom melebar. white-space:normal sengaja menimpa
    class "nw" di sel induknya. Dipakai 18 tempat; max-width per tempat tetap. */
-.nama{display:inline-block;max-width:180px;white-space:normal;overflow-wrap:anywhere;
+.nama{display:inline-block;max-width:180px;white-space:normal;overflow-wrap:break-word;
   line-height:1.35;vertical-align:middle}
+/* 13 Nov 2026 (Kak Mer): lencana di samping nama (VOUCHER, BIRO, …) sempat
+   menembus garis kolom. Penyebabnya sel induknya "nw" (tidak boleh turun
+   baris), jadi lencana tidak punya tempat selain keluar sel. Sel yang berisi
+   nama sekarang boleh turun baris dan punya lebar minimum, supaya lencana
+   pindah ke baris bawah dan namanya tidak terjepit jadi sepotong-sepotong.
+   overflow-wrap juga diganti break-word: "anywhere" membuat browser mengira
+   kolom nama boleh dipersempit sampai selebar satu huruf. */
+td.nw:has(> .nama){white-space:normal;min-width:140px}
 /* Tautan aksi di dalam sel: jangan pernah jadi tombol balok */
 /* Badge aksi: ukurannya kecil supaya tidak menaikkan tinggi baris, tapi punya
    latar berwarna supaya terbaca sebagai tombol — bukan teks biasa. */
@@ -803,6 +811,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-13c', 'Lencana di samping nama tidak lagi menembus garis kolom; nomor HP selalu tampil berawalan 0'],
   ['2026-11-13b', 'Lencana HARI INI di semua daftar penumpang, plus kolom Berangkat di Pelanggan Saya (agen)'],
   ['2026-11-13a', 'Tab Deposit sendiri: saldo biro dan perorangan dalam satu tempat, beserta seluruh mutasinya'],
   ['2026-11-12n', 'Saldo deposit bisa dipakai untuk membayar pesanan, termasuk saldo atas nomor HP lain'],
@@ -4040,7 +4049,12 @@ const selWa2 = (hp2, nama, kode) => !hp2 ? '' : `
        target="_blank" rel="noopener">Chat</a></div>`;
 
 const fmtHp = hp => {
-  const d = String(hp||'').replace(/\D/g,'');
+  /* Nomor bisa tersimpan "polos" tanpa nol (812…, hasil hp_polos() di deposit
+     dan WA biro/agen) atau berawalan 62. Ditampilkan selalu berawalan 0,
+     supaya tidak terbaca "8128-8887-777" (13 Nov 2026). */
+  let d = String(hp||'').replace(/\D/g,'');
+  if (d.startsWith('62')) d = '0' + d.slice(2);
+  else if (d.startsWith('8')) d = '0' + d;
   return d.length>9 ? d.replace(/^(\d{4})(\d{4})(\d+)$/,'$1-$2-$3') : d;
 };
 

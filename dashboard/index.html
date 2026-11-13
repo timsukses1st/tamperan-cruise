@@ -799,6 +799,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-12n', 'Saldo deposit bisa dipakai untuk membayar pesanan, termasuk saldo atas nomor HP lain'],
   ['2026-11-12m', 'Teks panjang (agen, pembeli, alamat, biro, email) tidak lagi terpotong "…", turun ke baris berikutnya'],
   ['2026-11-12l', 'Kode unik 3 digit di belakang total pesanan, untuk mencocokkan transfer dengan mutasi rekening'],
   ['2026-11-12k', 'Data latihan: referensi pembayaran diseragamkan jadi <bank> LAT<nomor pesanan>, tidak lagi angka karangan'],
@@ -1974,6 +1975,46 @@ function rpcLatihan(nama, arg = {}){
       return saldoLat(arg.p_biro, arg.p_hp);
     },
 
+    /* Cermin saldo_untuk_pesanan() dan bayar_pakai_deposit() di database. */
+    saldo_untuk_pesanan: () => [saldoUntukLat(arg.p_kode, arg.p_hp_lain)],
+
+    bayar_pakai_deposit: () => {
+      const sd = saldoUntukLat(arg.p_kode, arg.p_hp_lain);
+      const o = P.find(x => x.kode === arg.p_kode);
+      if (['cancel_pembeli','cancel_cuaca','expired'].includes(o.status))
+        throw { code:'22023', message:`Pesanan ${o.kode} sudah dibatalkan. `
+                                    + 'Tidak bisa menerima pembayaran baru.' };
+      if (!(arg.p_nominal > 0))
+        throw { code:'22023', message:'Jumlah pembayaran harus lebih dari nol.' };
+      const r = ringkasLat(o);
+      if (arg.p_nominal > r.r_sisa)
+        throw { code:'22023', message:`Jumlah Rp${arg.p_nominal} melebihi sisa tagihan Rp${r.r_sisa}.` };
+      if (arg.p_nominal > sd.r_saldo)
+        throw { code:'22023', message:`Saldo deposit tidak cukup: tersedia Rp${sd.r_saldo}, `
+                                    + `diminta Rp${arg.p_nominal}.` };
+      const kini = new Date().toISOString();
+      (LATIH.deposit_mutasi ||= []).unshift({
+        id:'d-'+Math.random().toString(36).slice(2,8),
+        biro_id:sd.r_jenis === 'biro' ? sd.r_kunci : null,
+        pemesan_hp:sd.r_jenis === 'hp' ? sd.r_kunci : null,
+        pesanan_id:o.id, arah:'keluar', nominal:arg.p_nominal, waktu:kini,
+        aktor_nama:'Anda (mode panduan)',
+        catatan:(arg.p_catatan ? arg.p_catatan + ' — ' : '') + `Dipakai membayar pesanan ${o.kode}.` });
+      (LATIH.pembayaran ||= []).push({
+        id:'y-'+Math.random().toString(36).slice(2,8), pesanan_id:o.id,
+        metode:'deposit', nominal_diterima:arg.p_nominal,
+        referensi:'Saldo ' + (sd.r_jenis === 'biro' ? sd.r_pemilik : 'HP ' + sd.r_pemilik),
+        catatan:arg.p_catatan || null, waktu:kini, diverifikasi_jam:kini,
+        oleh:'Anda (mode panduan)' });
+      const r2 = ringkasLat(o);
+      if (r2.r_sisa === 0 && ['pending','waiting'].includes(o.status)) o.status = 'paid';
+      else if (r2.r_sisa > 0 && o.status === 'pending')                o.status = 'waiting';
+      o.diubah = kini;
+      kunciKomisiLatihan();
+      return [{ r_dibayar:r2.r_dibayar, r_sisa:r2.r_sisa, r_keadaan:r2.r_keadaan,
+                r_saldo_sisa:sd.r_saldo - arg.p_nominal }];
+    },
+
     buat_pesanan_biro: () => {
       if (!['super','admin'].includes(S.peran))
         throw { code:'42501', message:'Hanya Super Admin atau Admin yang boleh membuat '
@@ -2172,6 +2213,27 @@ function ringkasLat(o){
              : dibayar === o.total ? 'lunas' : 'lebih',
     r_jml_bayar: baris.length,
   };
+}
+
+/* Cermin saldo_untuk_pesanan(): saldo biro kalau pesanan biro, saldo nomor
+   HP pemesan kalau perorangan, atau saldo nomor HP lain kalau diminta. */
+function saldoUntukLat(kode, hpLain){
+  if (!['super','admin'].includes(S.peran))
+    throw { code:'42501', message:'Hanya Super Admin atau Admin yang boleh melihat saldo.' };
+  const o = LATIH.pesanan.find(x => x.kode === kode);
+  if (!o) throw { code:'22023', message:`Pesanan ${kode} tidak ditemukan.` };
+  if (hpLain){
+    const h = hpPolos(hpLain);
+    if (!h) throw { code:'22023', message:'Nomor HP tidak valid.' };
+    return { r_jenis:'hp', r_pemilik:h, r_kunci:h, r_saldo:saldoLat(null, h) };
+  }
+  if (o.biro_id){
+    const b = (LATIH.biro || []).find(x => x.id === o.biro_id);
+    return { r_jenis:'biro', r_pemilik:b ? b.nama : 'Biro', r_kunci:o.biro_id,
+             r_saldo:saldoLat(o.biro_id, null) };
+  }
+  const h = hpPolos(o.pemesan_hp);
+  return { r_jenis:'hp', r_pemilik:h, r_kunci:h, r_saldo:h ? saldoLat(null, h) : 0 };
 }
 
 function saldoLat(biroId, hp){
@@ -3375,6 +3437,11 @@ function angkaRp(teks){
 const METODE = [['transfer','Transfer bank'],['tunai','Tunai'],
                 ['qris_statis','QRIS statis'],['qris_dinamis','QRIS dinamis'],
                 ['va','Virtual account']];
+/* 'deposit' sengaja TIDAK ada di METODE (pilihan Catat bayar): bayar pakai
+   saldo hanya lewat bayar_pakai_deposit(), yang sekaligus memotong saldo.
+   Kalau bisa dipilih manual, uangnya tercatat masuk tapi saldonya tidak
+   berkurang. Daftar ini hanya untuk MENAMPILKAN nama metode. */
+const LABEL_METODE = Object.fromEntries([...METODE, ['deposit','Saldo deposit']]);
 
 function pasangAksiUang(muatUlang){
   /* ---- Catat bayar / riwayat ---- */
@@ -3627,11 +3694,16 @@ async function popBayar(kode, muatUlang){
      mengubah RETURNS TABLE sebuah fungsi uang berarti DROP lalu CREATE, dan
      setiap pemanggil yang meleset langsung mematikan pencatatan pembayaran.
      Satu select kecil jauh lebih murah risikonya daripada itu. */
-  const [{ data: rs, error: e1 }, { data: rw }, { data: pd }] = await Promise.all([
+  const [{ data: rs, error: e1 }, { data: rw }, { data: pd }, { data: sd }] = await Promise.all([
     DB.rpc('ringkas_bayar',  { p_kode: kode }),
     DB.rpc('riwayat_bayar',  { p_kode: kode }),
     DB.from('pesanan').select('dp_target,kode_unik').eq('kode', kode).maybeSingle(),
+    /* Saldo deposit pemilik pesanan ini (biro, atau nomor HP pemesan).
+       Gagal dibaca tidak boleh mematikan Catat bayar, jadi errornya diabaikan
+       dan bagian saldo tidak ditampilkan. */
+    DB.rpc('saldo_untuk_pesanan', { p_kode: kode }).then(x => x, () => ({ data: null })),
   ]);
+  const saldo = Array.isArray(sd) ? sd[0] : sd;
   if (e1) return gagalPesan(e1);
   const r = Array.isArray(rs) ? rs[0] : rs;
   if (!r) return pesan('Ringkasan pembayaran tidak terbaca untuk pesanan ini.', 8000);
@@ -3670,13 +3742,27 @@ async function popBayar(kode, muatUlang){
         ${riwayat.map(b => `<tr>
           <td class="nw" style="color:var(--muted)">${tgl(b.r_waktu)}</td>
           <td class="num nw">${rp(b.r_nominal)}</td>
-          <td class="nw">${esc((METODE.find(m => m[0] === b.r_metode) || [,b.r_metode])[1])}</td>
+          <td class="nw">${esc(LABEL_METODE[b.r_metode] || b.r_metode)}</td>
           <td class="mono nw" style="font-size:11.5px">${esc(b.r_referensi || '—')}</td>
           <td class="nw">${esc(b.r_oleh)}</td></tr>`).join('')}
       </tbody></table></div>`
       : '<div class="note" style="margin-bottom:14px"><b>Belum ada uang masuk</b>Pesanan ini belum pernah dicatat pembayarannya.</div>'}
 
     ${bolehCatat ? `
+      <div class="note" id="dp-saldo-kotak" style="margin:0 0 14px">
+        <b>Bayar pakai saldo deposit</b>
+        <div id="dp-saldo-isi"></div>
+        <details style="margin-top:8px"><summary style="cursor:pointer;font-size:12.5px">
+          Pakai saldo atas nomor HP lain</summary>
+          <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+            <input id="dp-hp-lain" inputmode="tel" maxlength="16" autocomplete="off"
+                   placeholder="mis. 0812xxxxxxx" style="max-width:200px">
+            <button type="button" class="btn ghost" id="dp-cek-hp">Cek saldo</button>
+          </div>
+          <div class="hint">Untuk pelanggan yang dulu memesan dengan nomor lain.
+            Pastikan pemilik nomor itu memang setuju saldonya dipakai.</div>
+        </details>
+      </div>
       <div class="grid g2" style="margin-bottom:0">
         <div class="fld"><label for="by-nominal">Jumlah uang diterima</label>
           <input id="by-nominal" inputmode="numeric" autocomplete="off"
@@ -3709,6 +3795,56 @@ async function popBayar(kode, muatUlang){
 
   q('.tbl-tutup').onclick = tutup;
   if (!bolehCatat) return;
+
+  /* ---- Bayar pakai saldo deposit (12 Nov 2026) ---- */
+  let hpLain = null;
+  const gambarSaldo = sd => {
+    const isi = q('#dp-saldo-isi');
+    if (!sd){ isi.innerHTML = '<div class="hint">Saldo tidak terbaca.</div>'; return; }
+    const pemilik = sd.r_jenis === 'biro' ? `biro <b>${esc(sd.r_pemilik)}</b>`
+                                          : `nomor HP <b class="mono">${esc(sd.r_pemilik)}</b>`;
+    if (!(sd.r_saldo > 0)){
+      isi.innerHTML = `<div class="hint" style="margin-top:4px">Saldo ${pemilik}: <b>Rp0</b>.
+        Tidak ada saldo yang bisa dipakai.</div>`;
+      return;
+    }
+    const pakai = Math.min(sd.r_saldo, r.r_sisa);
+    isi.innerHTML = `
+      <div style="margin:6px 0">Saldo ${pemilik}: <b style="color:var(--ok)">${rp(sd.r_saldo)}</b></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input id="dp-pakai" inputmode="numeric" autocomplete="off" value="${pakai}" style="max-width:160px">
+        <button type="button" class="btn" id="dp-pakai-btn">Pakai saldo</button>
+      </div>
+      <div class="hint">Maksimal ${rp(pakai)} (saldo atau sisa tagihan, mana yang lebih kecil).
+        Saldo langsung berkurang dan tercatat di Mutasi Deposit. Tidak bisa dibatalkan,
+        salah pakai diperbaiki dengan mutasi penyeimbang.</div>`;
+    q('#dp-pakai-btn').onclick = async () => {
+      const n = angkaRp(q('#dp-pakai').value);
+      if (n === null || n <= 0) return pesan('Jumlah saldo harus angka lebih dari nol.', 7000);
+      if (n > pakai) return pesan(`Maksimal ${rp(pakai)}.`, 7000);
+      const btn = q('#dp-pakai-btn');
+      btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Memproses…';
+      const { data, error } = await DB.rpc('bayar_pakai_deposit', {
+        p_kode: kode, p_nominal: n, p_hp_lain: hpLain,
+        p_catatan: (q('#by-cat').value || '').trim() || null });
+      if (error){ btn.disabled = false; btn.textContent = 'Pakai saldo'; return gagalPesan(error); }
+      const h = Array.isArray(data) ? data[0] : data;
+      tutup();
+      pesan(`${rp(n)} dibayar dari saldo deposit untuk <b>${esc(kode)}</b>. `
+        + (h && h.r_keadaan === 'lunas' ? 'Pesanan LUNAS. ' : `Sisa tagihan ${rp(h ? h.r_sisa : r.r_sisa - n)}. `)
+        + `Sisa saldo ${rp(h ? h.r_saldo_sisa : sd.r_saldo - n)}.`, 12000);
+      muatUlang();
+    };
+  };
+  gambarSaldo(saldo);
+  q('#dp-cek-hp').onclick = async () => {
+    const v = (q('#dp-hp-lain').value || '').trim();
+    if (!v) return pesan('Ketik dulu nomor HP-nya.', 6000);
+    const { data, error } = await DB.rpc('saldo_untuk_pesanan', { p_kode: kode, p_hp_lain: v });
+    if (error) return gagalPesan(error);
+    hpLain = v;
+    gambarSaldo(Array.isArray(data) ? data[0] : data);
+  };
 
   const nom = q('#by-nominal');
   nom.focus(); nom.select();
@@ -4862,7 +4998,11 @@ async function siapkanIsiEkspor(periode, pilih, lapor){
       ['Batal', pesanan.filter(o => String(o.status).startsWith('cancel')).length, 'angka'],
       ['Berdasarkan tanggal uang diterima', null],
       ['Jumlah pembayaran', bayar.length, 'angka'],
-      ['Uang diterima', jml(bayar, 'nominal_diterima'), 'rp'],
+      /* Bayar pakai saldo deposit BUKAN uang baru masuk: uangnya sudah
+         diterima dulu waktu saldo itu terbentuk. Dipisah supaya tidak
+         terhitung dua kali. */
+      ['Uang diterima (transfer, tunai, QRIS)', jml(bayar.filter(r => r.metode !== 'deposit'), 'nominal_diterima'), 'rp'],
+      ['Dibayar pakai saldo deposit', jml(bayar.filter(r => r.metode === 'deposit'), 'nominal_diterima'), 'rp'],
       ['Berdasarkan tanggal berangkat', null],
       ['Rombongan berangkat', berangkat.length, 'angka'],
       ['Orang berangkat', jml(berangkat, 'pax'), 'angka'],
@@ -4918,7 +5058,7 @@ async function siapkanIsiEkspor(periode, pilih, lapor){
         { h:'Catatan', t:'teks', w:32 },
       ],
       baris: bayar.map(r => [r.waktu, kodePer[r.pesanan_id]?.kode, kodePer[r.pesanan_id]?.pemesan_nama,
-        r.metode, r.nominal_ditagih, r.nominal_diterima, r.referensi, r.diverifikasi_jam, r.catatan]),
+        LABEL_METODE[r.metode] || r.metode, r.nominal_ditagih, r.nominal_diterima, r.referensi, r.diverifikasi_jam, r.catatan]),
     });
   }
 

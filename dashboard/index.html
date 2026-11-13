@@ -811,6 +811,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-13e', 'Diskon pembeli hanya untuk pesanan yang mencantumkan kode agen; keterangan di Pengaturan diperbarui'],
   ['2026-11-13d', 'Kotak bayar pakai saldo deposit langsung terbuka di Catat bayar, tanpa klik selengkapnya'],
   ['2026-11-13c', 'Lencana di samping nama tidak lagi menembus garis kolom; nomor HP selalu tampil berawalan 0'],
   ['2026-11-13b', 'Lencana HARI INI di semua daftar penumpang, plus kolom Berangkat di Pelanggan Saya (agen)'],
@@ -7542,14 +7543,14 @@ async function tabAtur(){
         return `<div class="note"><b>Tiga hal berbeda yang semuanya terasa seperti potongan harga</b>
           Ini sumber kebingungan paling sering, jadi dipisah jelas-jelas.
           <br><br>
-          <b>1. Diskon untuk pembeli (${disk}%)</b> &mdash; kolom pertama di bawah.
-          Berlaku <b>otomatis untuk SEMUA pesanan</b>. Tidak perlu kode apa pun,
-          tidak peduli lewat agen atau tidak. ${esc(nmPaket)} ${rp(hUmum)}
-          &rarr; pembeli bayar ${rp(Math.round(hUmum * (100 - disk) / 100))}.
+          <b>1. Diskon kode agen (${disk}%)</b>, kolom pertama di bawah.
+          Hanya untuk pembeli yang <b>mencantumkan kode agen</b> saat memesan.
+          ${esc(nmPaket)} ${rp(hUmum)} &rarr; pembeli berkode agen bayar
+          ${rp(Math.round(hUmum * (100 - disk) / 100))}.
           <br><br>
-          <b>2. Kode agen (referral)</b> &mdash; <b>tidak memberi potongan sama
-          sekali</b> ke pembeli. Harganya sama persis dengan yang memesan tanpa
-          kode. Gunanya hanya menentukan komisi masuk ke siapa.
+          <b>2. Pesan tanpa kode agen</b>: <b>bayar harga penuh</b>, tanpa diskon,
+          dan tidak ada komisi agen. Pesanan biro yang dibuat dari dashboard
+          memakai diskon biro masing-masing (diatur di tab Biro), bukan angka ini.
           <br><br>
           <b>3. Voucher warga Pacitan</b> &mdash; <b>bukan persen</b>, tapi
           <b>pindah daftar harga</b>. ${esc(nmPaket)} dari ${rp(hUmum)} jadi
@@ -7607,8 +7608,8 @@ async function tabAtur(){
            lebih baik petunjuk polos daripada kalimat berisi "di bawah 0 tiket". */
         const adaAmb = amb > 0;
         return `
-      ${f('diskon_persen','Diskon untuk pembeli (%)',
-        `Potongan di halaman pemesanan, berlaku untuk SEMUA pesanan tanpa kode apa pun. `
+      ${f('diskon_persen','Diskon kode agen (%)',
+        `Potongan untuk pembeli yang mencantumkan kode agen. Tanpa kode agen, harga penuh. `
         + `Sekarang ${disk2}% &mdash; tiket ${rp(hrg)} dibayar `
         + `${rp(Math.round(hrg * (100 - disk2) / 100))}.`)}
       ${f('ambang_tier','Tiket untuk naik komisi',

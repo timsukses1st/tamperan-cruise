@@ -818,6 +818,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-18g', 'Penanda belum ada foto tidak lagi keluar kolom; produk yang belum pernah dipesan bisa dihapus permanen'],
   ['2026-11-18f', 'Foto paket diunggah dari dashboard; wajib saat menambah produk baru'],
   ['2026-11-18e', 'Voucher bisa diberi masa berlaku untuk promo edisi tertentu'],
   ['2026-11-18d', 'Rincian harga di pop-up Add-on dibuat seperti nota: yang berubah, total lama ke baru, sudah dibayar, kurang bayar'],
@@ -2020,6 +2021,19 @@ function rpcLatihan(nama, arg = {}){
 
     /* Cermin saldo_untuk_pesanan() dan bayar_pakai_deposit() di database. */
     saldo_untuk_pesanan: () => [saldoUntukLat(arg.p_kode, arg.p_hp_lain)],
+
+    /* Cermin hapus_produk() di database (18 Nov 2026). */
+    hapus_produk: () => {
+      if (!['super','admin'].includes(S.peran))
+        throw { code:'42501', message:'Hanya Super Admin atau Admin yang boleh menghapus produk.' };
+      const pr = (LATIH.produk || []).find(x => x.id === arg.p_id);
+      if (!pr) throw { code:'22023', message:'Produk tidak ditemukan.' };
+      const n = P.filter(o => o.produk_id === pr.id || o.produk?.nama === pr.nama).length;
+      if (n) throw { code:'22023', message:`${pr.nama} sudah punya ${n} pesanan, jadi tidak bisa dihapus `
+        + 'permanen (riwayat pesanannya akan rusak). Pakai Stop jual saja.' };
+      LATIH.produk = LATIH.produk.filter(x => x.id !== pr.id);
+      return [{ r_nama: pr.nama, r_foto_path: pr.foto_path || null }];
+    },
 
     /* Cermin ubah_tambahan() di database (18 Nov 2026). */
     ubah_tambahan: () => {
@@ -6030,8 +6044,13 @@ function selFotoProduk(p){
   return `<span style="position:relative;display:inline-block;width:64px;height:40px">
     <img src="${esc(urlFotoProduk(p))}" alt="" loading="lazy"
       style="width:64px;height:40px;object-fit:cover;border-radius:6px;border:1px solid var(--line)"
-      onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'pill p-warn',textContent:'BELUM ADA'}))">
+      onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+    <span style="display:none;position:absolute;inset:0;border:1.5px dashed #d9a441;border-radius:6px;
+      background:var(--warnbg,#fdf3dc);color:#8a5a00;font-size:9.5px;font-weight:700;line-height:1.15;
+      text-align:center;align-items:center;justify-content:center;white-space:normal">BELUM<br>ADA FOTO</span>
   </span>`;
+  /* 18 Nov 2026: penanda "belum ada foto" dibuat seukuran kotak foto (64x40),
+     bukan lencana selebar teksnya, yang sempat menembus garis kolom. */
 }
 
 function slugOtomatis(nama){
@@ -6156,6 +6175,25 @@ function pasangKelolaProduk(produkSemua){
     sedangUbah = t.dataset.ubahProduk;
     gambarForm();
     $('form-produk').scrollIntoView({ behavior:'smooth', block:'center' });
+  });
+
+  /* ---- Hapus permanen (18 Nov 2026) ----
+     Database (hapus_produk) menolak produk yang sudah pernah dipesan, karena
+     riwayat pesanan, ekspor, dan komisi menunjuk ke produk itu. */
+  $('isi').querySelectorAll('[data-hapus-produk]').forEach(b => b.onclick = async e => {
+    e.preventDefault();
+    const p = produkSemua.find(x => x.id === b.dataset.hapusProduk);
+    if (!p) return;
+    if (!confirm(`Hapus permanen produk "${p.nama}"?\n\n`
+      + `Produk dan fotonya hilang selamanya dan tidak bisa dikembalikan. `
+      + `Produk yang sudah pernah dipesan tidak bisa dihapus, cukup Stop jual.`)) return;
+    b.style.pointerEvents = 'none'; b.textContent = '…';
+    const { data, error } = await DB.rpc('hapus_produk', { p_id: p.id });
+    if (error){ b.style.pointerEvents = ''; b.textContent = 'Hapus'; return gagalPesan(error); }
+    const h = Array.isArray(data) ? data[0] : data;
+    if (h && h.r_foto_path) await DB.storage.from('galeri').remove([h.r_foto_path]);
+    pesan(`<b>${esc(p.nama)}</b> dihapus permanen.`, 8000);
+    tabAtur();
   });
 
   $('isi').querySelectorAll('[data-produk-aktif]').forEach(b => b.onclick = async e => {
@@ -8218,7 +8256,12 @@ async function tabAtur(){
                 <a class="aksi ghost" href="#" data-ubah-produk="${p.id}">Ubah</a>
                 <a class="aksi ${p.aktif?'matikan':'hidupkan'}" href="#"
                    data-produk-aktif="${p.id}"
-                   data-nilai="${p.aktif?0:1}">${p.aktif?'Stop jual':'Jual lagi'}</a></span>`}</td>
+                   data-nilai="${p.aktif?0:1}">${p.aktif?'Stop jual':'Jual lagi'}</a>${
+                /* Hapus hanya untuk produk yang sudah tidak dijual: dua langkah,
+                   supaya produk yang sedang dijual tidak terhapus karena salah klik. */
+                p.aktif ? '' : `
+                <a class="aksi" href="#" data-hapus-produk="${p.id}"
+                   style="background:var(--dangerbg);color:var(--danger);border-color:#e3a8a2">Hapus</a>`}</span>`}</td>
         </tr>`).join('')}</tbody>
       </table>
       ${ro ? '' : `<div id="form-produk" style="margin-top:16px"></div>`}

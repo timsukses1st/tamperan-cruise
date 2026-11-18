@@ -49,6 +49,9 @@ h2{font-size:22px;letter-spacing:-.4px;margin:34px 0 4px}
   margin-bottom:14px;box-shadow:0 1px 2px rgba(15,39,68,.06)}
 .grid{display:grid;gap:14px}
 .g2{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+/* Tiga kolom jumlah penumpang (dewasa / anak / balita), 18 Nov 2026. */
+.g3-pnp{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:560px){ .g3-pnp{grid-template-columns:1fr 1fr} .g3-pnp > :last-child{grid-column:1/-1} }
 
 /* ---------- produk ---------- */
 .prod{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;
@@ -1167,26 +1170,32 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
           </div>
         </div>
 
-        <div class="grid g2">
+        <!-- 18 Nov 2026 (Kak Mer): jumlah penumpang dipisah per golongan usia,
+             tanpa kata "di antaranya" yang membingungkan. #f-pax dan #f-anak
+             tetap ada (tersembunyi) dan DIHITUNG dari tiga kolom ini, supaya
+             seluruh kode lain yang membacanya tidak perlu diubah:
+               #f-pax  = dewasa + anak + balita
+               #f-anak = anak + balita   (semua di bawah 12 tahun, life jacket anak) -->
+        <input id="f-pax" type="hidden" value="2">
+        <input id="f-anak" type="hidden" value="0">
+        <div class="fld" style="margin-bottom:6px"><label>Jumlah penumpang</label></div>
+        <div class="grid g3-pnp" id="fld-anak">
           <div class="fld">
-            <label for="f-pax">Jumlah penumpang</label>
-            <input id="f-pax" type="number" min="1" max="200" value="2" inputmode="numeric">
+            <label for="f-dewasa" style="font-weight:600">Dewasa <span style="font-weight:400;color:var(--muted)">(12 tahun ke atas)</span></label>
+            <input id="f-dewasa" type="number" min="0" max="200" value="2" inputmode="numeric">
           </div>
-          <div class="fld" id="fld-anak">
-            <label for="f-anak">Di antaranya anak di bawah 12 tahun</label>
-            <input id="f-anak" type="number" min="0" value="0" inputmode="numeric">
-            <div class="hint">Dipakai untuk menyiapkan life jacket ukuran anak.</div>
+          <div class="fld">
+            <label for="f-anak2" style="font-weight:600">Anak <span style="font-weight:400;color:var(--muted)">(5&ndash;11 tahun)</span></label>
+            <input id="f-anak2" type="number" min="0" max="200" value="0" inputmode="numeric">
+          </div>
+          <div class="fld" id="fld-balita">
+            <label for="f-balita" style="font-weight:600">Balita <span style="font-weight:400;color:var(--muted)">(di bawah 5 tahun)</span>
+              <span class="pill p-ok" style="font-size:10px">GRATIS</span></label>
+            <input id="f-balita" type="number" min="0" max="200" value="0" inputmode="numeric">
           </div>
         </div>
-        <!-- 18 Nov 2026: balita di bawah 5 tahun gratis di semua paket.
-             Tetap dihitung sebagai penumpang (kursi & life jacket), tapi tidak
-             dikenai harga tiket. Bagian dari jumlah anak di atas. -->
-        <div class="fld" id="fld-balita">
-          <label for="f-balita">Di antaranya balita di bawah 5 tahun <span class="pill p-ok" style="font-size:11px">GRATIS</span></label>
-          <input id="f-balita" type="number" min="0" value="0" inputmode="numeric" style="max-width:200px">
-          <div class="hint">Balita di bawah 5 tahun tidak dikenai harga tiket. Tetap dihitung
-            sebagai penumpang dan sudah termasuk di jumlah anak di atas.</div>
-        </div>
+        <div class="hint" id="pnp-total" style="margin:-4px 0 14px">Total 2 penumpang.
+          Anak dan balita dipakai untuk menyiapkan life jacket ukuran anak.</div>
 
         <!-- Kode voucher: terpisah dari kode agen. Agen membagikannya lewat chat. -->
         <div class="fld" id="fld-voucher">
@@ -1364,7 +1373,7 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
          dinaikkan TERPISAH ke Vercel, jadi dua-duanya perlu nomor sendiri:
          kalau cuma satu yang punya, salah satu bisa tertinggal tanpa ketahuan.
          Perbarui baris ini tiap kali berkas ini dikirim ulang. -->
-    <span style="opacity:.55;font-size:11.5px">versi 2026-11-18c</span>
+    <span style="opacity:.55;font-size:11.5px">versi 2026-11-18d</span>
   </footer>
 </div>
 
@@ -1925,6 +1934,17 @@ function hitungBalita(){
   const a = parseInt($('f-balita').value, 10);
   return Number.isFinite(a) && a >= 0 ? a : 0;
 }
+/* Tiga kolom golongan usia -> #f-pax dan #f-anak tersembunyi (18 Nov 2026). */
+function satukanPenumpang(){
+  const v = id => { const x = parseInt($(id).value, 10); return Number.isFinite(x) && x > 0 ? x : 0; };
+  const dw = v('f-dewasa'), an = v('f-anak2'), bl = v('f-balita');
+  $('f-pax').value  = dw + an + bl;
+  $('f-anak').value = an + bl;
+  const t = dw + an + bl;
+  $('pnp-total').innerHTML = t
+    ? `Total <b>${t} penumpang</b>${bl ? `, ${bl} balita gratis` : ''}. Anak dan balita dipakai untuk menyiapkan life jacket ukuran anak.`
+    : 'Isi minimal satu penumpang.';
+}
 
 /* ====================== GALERI FOTO ======================
    Dibaca LANGSUNG dari tabel galeri, bukan lewat fungsi khusus: RLS yang
@@ -2232,9 +2252,7 @@ async function kirim(){
   const anak = hitungAnak();
   if (anak > n) return pesan('Jumlah anak tidak boleh melebihi jumlah penumpang.');
   const balita = hitungBalita();
-  if (balita > anak) return pesan('Jumlah balita tidak boleh lebih dari jumlah anak di bawah 12 tahun. '
-    + 'Balita juga dihitung sebagai anak.', 9000);
-  if (balita >= n) return pesan('Minimal satu penumpang berbayar. Balita harus didampingi.', 8000);
+  if (balita >= n) return pesan('Minimal satu dewasa atau anak berbayar. Balita harus didampingi.', 8000);
 
   tombol.disabled = true;
   tombol.innerHTML = '<span class="spin"></span> Menyimpan…';
@@ -2654,11 +2672,10 @@ const TUTOR = [
        + 'untuk biro yang sudah bekerja sama, dan harus memakai kode biro.' },
   { cari:'#f-tgl', judul:'Tanggal berangkat',
     teks:'Pilih tanggal rencana berlayar. Tidak bisa tanggal yang sudah lewat.' },
-  { cari:'#f-pax', judul:'Jumlah penumpang',
-    teks:'Isi jumlah orang yang ikut. Nama penumpang satu per satu <b>tidak diminta</b> '
-       + '&mdash; data pemesan di atas yang jadi penanggung jawab rombongan. Jangan lupa '
-       + 'isi berapa yang di bawah 12 tahun di sebelahnya; itu dipakai menyiapkan '
-       + 'life jacket ukuran anak.' },
+  { cari:'#fld-anak', judul:'Jumlah penumpang',
+    teks:'Isi jumlah orang per golongan usia: dewasa, anak 5&ndash;11 tahun, dan balita di '
+       + 'bawah 5 tahun. <b>Balita gratis</b>. Nama penumpang satu per satu <b>tidak '
+       + 'diminta</b> &mdash; data pemesan di atas yang jadi penanggung jawab rombongan.' },
   { cari:'#fld-voucher', judul:'Kode voucher (kalau ada)',
     teks:'Kalau agen Anda memberi kode voucher, masukkan di sini lalu tekan Periksa. '
        + 'Kode voucher berbeda dengan kode agen, dan tidak semua paket bisa memakainya.' },
@@ -2898,7 +2915,9 @@ $('tb-biro').onclick = () => setTipe('biro');
 $('bcek').onclick    = () => cekKodeAgen();
 $('bkode').onkeydown = e => { if (e.key === 'Enter'){ e.preventDefault(); cekKodeAgen(); } };
 $('f-produk').onchange = gambarUlang;
-$('f-pax').oninput     = gambarUlang;
+['f-dewasa','f-anak2','f-balita'].forEach(id =>
+  $(id).oninput = () => { satukanPenumpang(); gambarUlang(); });
+satukanPenumpang();
 $('f-tgl').onchange    = ringkasan;
 
 /* ---- Dua kolom uang muka saling mengisi ----
@@ -2940,8 +2959,7 @@ $('f-vou').onkeydown   = e => { if (e.key === 'Enter'){ e.preventDefault(); cekV
    yang nyangkut dari kode sebelumnya. */
 $('f-vou').oninput     = () => { if (S.vouOk) { S.vouOk=false; S.vouKode=null;
   $('vou-ket').textContent='Tekan Periksa untuk memeriksa kode ini.'; ringkasan(); } };
-$('f-anak').oninput    = ringkasan;
-$('f-balita').oninput  = ringkasan;
+
 $('kirim').onclick     = kirim;
 $('tombol-tutor').onclick = () => mulaiTutor(true);
 

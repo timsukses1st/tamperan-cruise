@@ -818,6 +818,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-18d', 'Rincian harga di pop-up Add-on dibuat seperti nota: yang berubah, total lama ke baru, sudah dibayar, kurang bayar'],
   ['2026-11-18c', 'Tab Pesanan: tombol tindakan dipisah dari status ke kolom Tindakan sendiri'],
   ['2026-11-18b', 'Pop-up Add-on diperjelas: keterangan sudah dipesan, tombol tambah/kurang, dan akibatnya pada tagihan'],
   ['2026-11-18a', 'Add-on tampil di Pesanan, Manifest, Pembagian kapal, Boarding, Pelanggan Saya dan ekspor; add-on bisa ditambah atau diubah sesudah pesanan dibuat'],
@@ -3907,15 +3908,30 @@ async function popAddon(kode, muatUlang){
     const kotak = q('#ad-akibat');
     if (salah || !berubah || !r){ kotak.innerHTML = ''; }
     else {
+      /* 18 Nov 2026 (Kak Mer: "rincian harganya masih bikin bingung").
+         Dulu: total sekarang, tambahan, total baru, sisa, empat angka tanpa
+         penjelasan dari mana asalnya. Sekarang dibaca seperti nota: apa yang
+         berubah (per add-on, dengan hitungannya), lalu total lama -> baru,
+         lalu uang yang sudah masuk, dan terakhir kekurangannya. */
+      const rinci = kumpul().filter(({ t, jml }) => jml !== jmlAwal(t)).map(({ t, jml }) => {
+        const awal = jmlAwal(t), hrg = hargaDari(t);
+        const beda = hrg * (kali(t, jml) - (awal ? kali(t, awal) : 0));
+        const apa = t.satuan === 'unit'
+          ? `${awal} &rarr; ${jml} unit <span style="color:var(--muted)">(${jml - awal > 0 ? '+' : '&minus;'}${Math.abs(jml - awal)} &times; ${rp(hrg)})</span>`
+          : (jml ? 'ditambahkan' : 'dihapus');
+        return `<div class="uang"><span>${esc(t.nama)}<br><span style="font-size:12px">${apa}</span></span>
+          <b style="color:${beda >= 0 ? 'var(--warn)' : 'var(--ok)'}">${beda >= 0 ? '+' : '&minus;'}${rp(Math.abs(beda))}</b></div>`;
+      }).join('');
       const totalBaru = r.r_total + selisih, sisaBaru = totalBaru - r.r_dibayar;
       kotak.innerHTML = `
-        <div class="uang"><span>Total pesanan sekarang</span><b>${rp(r.r_total)}</b></div>
-        <div class="uang"><span>${selisih >= 0 ? 'Tambahan' : 'Berkurang'}</span>
-          <b style="color:${selisih >= 0 ? 'var(--warn)' : 'var(--ok)'}">${selisih >= 0 ? '+' : '&minus;'}${rp(Math.abs(selisih))}</b></div>
-        <div class="uang"><span>Total sesudah disimpan</span><b>${rp(totalBaru)}</b></div>
-        <div class="uang"><span>Yang masih harus dibayar</span><b style="color:${
+        <div style="font-weight:700;margin-bottom:2px">Yang berubah</div>
+        ${rinci}
+        <div style="font-weight:700;margin:14px 0 2px">Tagihan</div>
+        <div class="uang"><span>Total pesanan</span><b>${rp(r.r_total)} &rarr; ${rp(totalBaru)}</b></div>
+        <div class="uang"><span>Sudah dibayar</span><b style="color:var(--ok)">${rp(r.r_dibayar)}</b></div>
+        <div class="uang" style="font-size:16px"><span><b>${sisaBaru < 0 ? 'Tidak bisa disimpan' : 'Kurang bayar'}</b></span><b style="color:${
           sisaBaru > 0 ? 'var(--warn)' : sisaBaru < 0 ? 'var(--danger)' : 'var(--ok)'}">${
-          sisaBaru < 0 ? 'tidak bisa, sudah dibayar ' + rp(r.r_dibayar) : rp(sisaBaru)}</b></div>`;
+          sisaBaru < 0 ? 'melebihi uang yang sudah masuk' : sisaBaru === 0 ? 'Rp0 (lunas)' : rp(sisaBaru)}</b></div>`;
       if (sisaBaru < 0){ btn.disabled = true; btn.textContent = 'Tidak bisa disimpan'; }
     }
     const nl = q('#ad-lunas'); if (nl) nl.style.display = berubah && selisih > 0 ? '' : 'none';

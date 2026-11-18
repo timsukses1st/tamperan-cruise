@@ -818,6 +818,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-18e', 'Voucher bisa diberi masa berlaku untuk promo edisi tertentu'],
   ['2026-11-18d', 'Rincian harga di pop-up Add-on dibuat seperti nota: yang berubah, total lama ke baru, sudah dibayar, kurang bayar'],
   ['2026-11-18c', 'Tab Pesanan: tombol tindakan dipisah dari status ke kolom Tindakan sendiri'],
   ['2026-11-18b', 'Pop-up Add-on diperjelas: keterangan sudah dipesan, tombol tambah/kurang, dan akibatnya pada tagihan'],
@@ -1452,6 +1453,10 @@ function dataLatihan(){
       { id:'v1', kode:'PACITAN',     keterangan:'Harga warga Pacitan',      aktif:true,  dibuat:JAM(200) },
       { id:'v2', kode:'WARGAPCT',    keterangan:'Kode pendek untuk lapangan',aktif:true,  dibuat:JAM(150) },
       { id:'v3', kode:'PROMOLAMA',   keterangan:'Kode lama, tidak berlaku',  aktif:false, dibuat:JAM(900) },
+      { id:'v4', kode:'LAT-PROMO-EDISI', keterangan:'Contoh promo edisi terbatas', aktif:true,
+        dibuat:JAM(60), berlaku_mulai:HARI(-3), berlaku_sampai:HARI(10) },
+      { id:'v5', kode:'LAT-PROMO-LALU',  keterangan:'Contoh promo yang sudah lewat', aktif:true,
+        dibuat:JAM(700), berlaku_mulai:HARI(-40), berlaku_sampai:HARI(-10) },
     ],
     tambahan: [
       { id:'t1', slug:'drone-pilot', nama:'Drone + Pilot', harga:400000, satuan:'pesanan',
@@ -6738,9 +6743,26 @@ async function tabKapal(){
 }
 
 /* ============ VOUCHER ============ */
+/* Masa berlaku voucher (18 Nov 2026). "Hari ini" memakai tanggal WIB, sama
+   dengan cek_voucher() dan buat_pesanan() di database. */
+const tglPendekTh = d => d ? new Date(d + 'T00:00:00')
+  .toLocaleDateString('id-ID', { day:'numeric', month:'short', year:'numeric' }) : '';
+function masaVoucher(v){
+  if (!v.berlaku_mulai && !v.berlaku_sampai) return '<span style="color:var(--muted)">Berlaku terus</span>';
+  if (v.berlaku_mulai && v.berlaku_sampai)
+    return `${tglPendekTh(v.berlaku_mulai)} &ndash; ${tglPendekTh(v.berlaku_sampai)}`;
+  return v.berlaku_mulai ? `Mulai ${tglPendekTh(v.berlaku_mulai)}` : `Sampai ${tglPendekTh(v.berlaku_sampai)}`;
+}
+function statusVoucher(v){
+  const h = hariIniLokal();
+  if (!v.aktif) return ['NONAKTIF', 'p-mute'];
+  if (v.berlaku_mulai && h < v.berlaku_mulai) return ['BELUM MULAI', 'p-warn'];
+  if (v.berlaku_sampai && h > v.berlaku_sampai) return ['BERAKHIR', 'p-dang'];
+  return ['BERLAKU', 'p-ok'];
+}
 async function tabVoucher(){
   const [{ data, error }, { data:tamb, error:e2 }] = await Promise.all([
-    DB.from('kode_voucher').select('id,kode,keterangan,aktif,dibuat').order('dibuat', {ascending:false}),
+    DB.from('kode_voucher').select('id,kode,keterangan,aktif,dibuat,berlaku_mulai,berlaku_sampai').order('dibuat', {ascending:false}),
     DB.from('tambahan').select('id,slug,nama,ket,harga,satuan,maks,aktif').order('urutan')
   ]);
   if (error) return gagal(error);
@@ -6762,27 +6784,39 @@ async function tabVoucher(){
         <div class="fld"><label for="v-ket">Keterangan</label>
           <input id="v-ket" placeholder="mis. Harga warga Pacitan">
           <div class="hint">Muncul di halaman pemesanan saat kode diperiksa.</div></div>
+        <div class="fld"><label for="v-mulai">Berlaku mulai <span style="font-weight:400;color:var(--muted)">(boleh dikosongkan)</span></label>
+          <input id="v-mulai" type="date"></div>
+        <div class="fld"><label for="v-sampai">Berlaku sampai <span style="font-weight:400;color:var(--muted)">(boleh dikosongkan)</span></label>
+          <input id="v-sampai" type="date">
+          <div class="hint">Isi untuk promo edisi tertentu. Kosongkan dua-duanya kalau voucher berlaku terus.
+            Dihitung dari <b>tanggal pemesanan</b>, bukan tanggal berangkat.</div></div>
       </div>
       <button type="button" class="btn" id="v-buat">Terbitkan</button>
     </div>` : ''}
     <div class="card scrollx">
       <h3>Kode Voucher</h3>
       <table data-papan="voucher">
-        <thead><tr><th class="nw">Kode</th><th>Keterangan</th><th class="nw">Status</th>
-          <th class="nw">Dibuat</th><th></th></tr></thead>
-        <tbody>${(data||[]).length ? data.map(v=>`<tr>
+        <thead><tr><th class="nw">Kode</th><th>Keterangan</th><th class="nw">Masa berlaku</th>
+          <th class="nw">Status</th><th class="nw">Dibuat</th><th class="nw">Tindakan</th></tr></thead>
+        <tbody>${(data||[]).length ? data.map(v=>{ const st = statusVoucher(v); return `<tr>
           <td class="mono nw"><b>${esc(v.kode)}</b></td>
           <td>${esc(v.keterangan || '—')}</td>
-          <td class="nw">${v.aktif
-            ? '<span class="pill p-ok">AKTIF</span>' : '<span class="pill p-mute">NONAKTIF</span>'}</td>
+          <td class="nw" data-urut="${v.berlaku_sampai || '9999'}">${masaVoucher(v)}</td>
+          <td class="nw"><span class="pill ${st[1]}">${st[0]}</span></td>
           <td class="nw" style="color:var(--muted)">${tgl(v.dibuat)}</td>
           <td class="nw">${bisa
-            ? `<a class="aksi ${v.aktif?'matikan':'hidupkan'}" href="#"
+            ? `<span class="sel2"><a class="aksi ghost" href="#" data-vmasa="${v.id}">Ubah masa</a>
+               <a class="aksi ${v.aktif?'matikan':'hidupkan'}" href="#"
                  data-vaktif="${v.id}" data-nilai="${v.aktif?0:1}">${
-                 v.aktif?'Nonaktifkan':'Aktifkan'}</a>`
+                 v.aktif?'Nonaktifkan':'Aktifkan'}</a></span>`
             : '<span style="color:var(--muted);font-size:11.5px">tidak bisa edit</span>'}</td>
-        </tr>`).join('') : `<tr><td colspan="5"><div class="hint">Belum ada kode voucher.</div></td></tr>`}</tbody>
+        </tr>`; }).join('') : `<tr><td colspan="6"><div class="hint">Belum ada kode voucher.</div></td></tr>`}</tbody>
       </table>
+      <div class="note"><b>Masa berlaku untuk promo edisi tertentu</b>
+        Voucher bisa diberi tanggal mulai dan/atau tanggal selesai. Di luar tanggal itu,
+        halaman pemesanan menolak kodenya dengan pesan "belum berlaku" atau "sudah
+        berakhir". Patokannya <b>tanggal pemesanan</b> (WIB), jadi pesanan yang dibuat
+        selama promo tetap dapat harganya walau berangkatnya sesudah promo selesai.</div>
       <div class="note"><b>Voucher ini membuka harga warga Pacitan</b>
         Nilainya tidak disimpan di kode voucher — diambil dari harga lokal di tabel
         produk saat pemesanan. Jadi kalau harga warga Pacitan berubah, cukup diubah
@@ -6868,8 +6902,13 @@ async function tabVoucher(){
       if (!/^[A-Za-z0-9._-]{3,32}$/.test(kode))
         return pesan('<b>Ditolak</b> Kode harus 3–32 karakter: huruf, angka, titik, garis bawah, atau strip.', 9000);
       $('v-buat').disabled = true;
+      const mulai = $('v-mulai').value || null, sampai = $('v-sampai').value || null;
+      if (mulai && sampai && mulai > sampai)
+        return pesan('<b>Ditolak</b> Tanggal mulai tidak boleh sesudah tanggal selesai.', 9000);
+      $('v-buat').disabled = true;
       const { error } = await DB.from('kode_voucher')
-        .insert({ kode, keterangan: $('v-ket').value.trim() || null });
+        .insert({ kode, keterangan: $('v-ket').value.trim() || null,
+                  berlaku_mulai: mulai, berlaku_sampai: sampai });
       $('v-buat').disabled = false;
       if (error){
         if (error.code === '23505') return pesan(`<b>Ditolak</b> Kode <b>${esc(kode)}</b> sudah ada.`, 9000);
@@ -6878,6 +6917,36 @@ async function tabVoucher(){
       pesan(`Kode ${esc(kode)} diterbitkan dan langsung bisa dipakai di halaman pemesanan.`);
       tabVoucher();
     };
+    $('isi').querySelectorAll('[data-vmasa]').forEach(b => b.onclick = e => {
+      e.preventDefault();
+      const v = (data || []).find(x => x.id === b.dataset.vmasa);
+      const { q, tutup } = bukaLapis(`
+        <h3>Masa berlaku ${esc(v.kode)}</h3>
+        <div class="hint" style="margin-bottom:10px">Kosongkan dua-duanya supaya voucher berlaku terus.
+          Dihitung dari tanggal pemesanan (WIB).</div>
+        <div class="grid g2" style="margin-bottom:0">
+          <div class="fld"><label for="vm-mulai">Berlaku mulai</label>
+            <input id="vm-mulai" type="date" value="${v.berlaku_mulai || ''}"></div>
+          <div class="fld"><label for="vm-sampai">Berlaku sampai</label>
+            <input id="vm-sampai" type="date" value="${v.berlaku_sampai || ''}"></div>
+        </div>
+        <div class="aksi-bar">
+          <button type="button" class="btn ghost tbl-tutup">Batal</button>
+          <button type="button" class="btn" id="vm-simpan">Simpan</button>
+        </div>`);
+      q('.tbl-tutup').onclick = tutup;
+      q('#vm-simpan').onclick = async () => {
+        const mulai = q('#vm-mulai').value || null, sampai = q('#vm-sampai').value || null;
+        if (mulai && sampai && mulai > sampai)
+          return pesan('<b>Ditolak</b> Tanggal mulai tidak boleh sesudah tanggal selesai.', 9000);
+        q('#vm-simpan').disabled = true;
+        const { error } = await DB.from('kode_voucher')
+          .update({ berlaku_mulai: mulai, berlaku_sampai: sampai, diubah: new Date().toISOString() })
+          .eq('id', v.id);
+        if (error){ q('#vm-simpan').disabled = false; return gagalPesan(error); }
+        tutup(); pesan(`Masa berlaku ${esc(v.kode)} diperbarui.`); tabVoucher();
+      };
+    });
     $('isi').querySelectorAll('[data-vaktif]').forEach(b => b.onclick = async e => {
       e.preventDefault(); b.style.pointerEvents='none';
       const { error } = await DB.from('kode_voucher')
@@ -6972,8 +7041,8 @@ async function tabVoucher(){
   }
 
   lengkapiTabel('#isi table[data-papan="voucher"]', {
-    id: 'voucher', takUrut: [4], petunjuk: 'Cari kode voucher…',
-    saring: [{ kolom: 2, semua: 'Semua status', pilihan: ['AKTIF','NONAKTIF'] }]
+    id: 'voucher', takUrut: [5], petunjuk: 'Cari kode voucher…',
+    saring: [{ kolom: 3, semua: 'Semua status', pilihan: ['BERLAKU','BELUM MULAI','BERAKHIR','NONAKTIF'] }]
   });
   lengkapiTabel('#isi table[data-papan="tambahan"]', {
     id: 'tambahan', takUrut: [5], petunjuk: 'Cari nama add-on…'

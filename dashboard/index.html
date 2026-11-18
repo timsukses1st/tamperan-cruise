@@ -818,6 +818,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-18h', 'Balita di bawah 5 tahun gratis: tampil di daftar penumpang, formulir pesanan biro, dan ekspor'],
   ['2026-11-18g', 'Penanda belum ada foto tidak lagi keluar kolom; produk yang belum pernah dipesan bisa dihapus permanen'],
   ['2026-11-18f', 'Foto paket diunggah dari dashboard; wajib saat menambah produk baru'],
   ['2026-11-18e', 'Voucher bisa diberi masa berlaku untuk promo edisi tertentu'],
@@ -1287,8 +1288,10 @@ function dataLatihan(){
         kode_voucher_beku:null, pemesan_nama:'Yuni Astuti', pemesan_hp:'081200000007',
         agen_id:AG.budi, produk:pr('Cruise Daily'), agen:{nama:'Budi Santoso'}, kapal:null,
         jml_naik:0 },
-      { id:'o8', kode:'TTC-LAT08', tipe:'perorangan', pax:5, anak:2, total:475000,
-        subtotal:500000, diskon_nominal:25000, tambahan_nominal:0,
+      /* o8: contoh balita gratis. 5 orang, 2 anak, 1 di antaranya balita ->
+         yang dibayar 4 orang x Rp100.000 = 400.000, diskon 5% = 380.000. */
+      { id:'o8', kode:'TTC-LAT08', tipe:'perorangan', pax:5, anak:2, balita:1, total:380000,
+        subtotal:400000, diskon_nominal:20000, tambahan_nominal:0,
         status:'expired', fu_status:'dihubungi', fu_terakhir:JAM(11),
         dibuat:JAM(44), diubah:JAM(11), tanggal_berangkat:HARI(1), kapal_id:null,
         kode_voucher_beku:'WARGAPCT', pemesan_nama:'Teguh Prakoso', pemesan_hp:'081200000008',
@@ -1711,7 +1714,7 @@ function kunciKomisiLatihan(){
     const ag = (LATIH.agen || []).find(a => a.id === o.agen_id);
     if (!ag || ag.internal) continue;
     const k = o.agen_id + '|' + String(o.dibuat).slice(0,7);
-    kum[k] = (kum[k] || 0) + o.pax;
+    kum[k] = (kum[k] || 0) + o.pax - (o.balita || 0);   /* balita gratis tidak dihitung, sama dengan kunci_komisi() */
     const tarif = amb && kum[k] >= amb ? atas : bawah;
     const dasar = bruto ? o.subtotal : o.total - (o.kode_unik || 0);   /* sama dengan kunci_komisi(): tanpa kode unik */
     o.komisi_persen = tarif;
@@ -1748,7 +1751,7 @@ function rpcLatihan(nama, arg = {}){
         const mil = P.filter(o => o.agen_id === a.id
           && ['paid','boarded'].includes(o.status)
           && (!per || String(o.dibuat).slice(0,7) === per));
-        const tiket = jumlah(mil, 'pax');
+        const tiket = jumlah(mil, 'pax') - jumlah(mil, 'balita');   /* balita gratis tidak dihitung */
         const omzet = jumlah(mil, 'total');
         /* Tarif = yang berlaku untuk pesanan BERIKUTNYA. Komisinya TIDAK
            dihitung dari tarif ini — dijumlahkan dari yang sudah dikunci,
@@ -2137,7 +2140,10 @@ function rpcLatihan(nama, arg = {}){
           throw { code:'22023', message:`Harga katalog paket ${pk.nama} belum diisi.` };
         persen = Number(b.diskon_persen) || 0;
       }
-      const sub = satuan * pax, disk = Math.round(sub * persen / 100), total = sub - disk;
+      const balita = arg.p_balita || 0;
+      if (balita < 0 || balita > anak) throw { code:'22023', message:'Jumlah balita tidak boleh lebih dari jumlah anak.' };
+      if (balita >= pax) throw { code:'22023', message:'Minimal satu penumpang berbayar.' };
+      const sub = satuan * (pax - balita), disk = Math.round(sub * persen / 100), total = sub - disk;
       const dp = arg.p_dp || 0;
       if (dp < 0)     throw { code:'22023', message:'Jumlah DP tidak masuk akal.' };
       if (dp > total) throw { code:'22023', message:`DP Rp${dp} melebihi total tagihan Rp${total}.` };
@@ -2146,7 +2152,7 @@ function rpcLatihan(nama, arg = {}){
       const kode = 'TTC-LAT' + String(50 + n);
       const id   = 'o-lat-' + Math.random().toString(36).slice(2,8);
       LATIH.pesanan.unshift({
-        id, kode, tipe:'biro', pax, anak, total, subtotal:sub, diskon_nominal:disk,
+        id, kode, tipe:'biro', pax, anak, balita, total, subtotal:sub, diskon_nominal:disk,
         tambahan_nominal:0, harga_satuan_beku:satuan,
         diskon_persen_beku:persen.toFixed(2),
         biro_id:b.id, biro_nama:b.nama, biro_pic:b.pic, biro_pic_wa:b.pic_wa,
@@ -2995,6 +3001,10 @@ const hariIniLokal = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 };
+/* Balita di bawah 5 tahun: gratis, tetap dihitung sebagai penumpang (18 Nov 2026). */
+const pillBalita = o => o && o.balita
+  ? ` <span class="pill p-ok" title="Balita di bawah 5 tahun, tidak dikenai harga tiket">${o.balita} balita gratis</span>` : '';
+
 /* ---- Add-on per pesanan (18 Nov 2026) ----
    Sebelum ini dashboard tidak pernah membaca pesanan_tambahan: totalnya ikut
    terjumlah, rinciannya tidak terlihat di mana pun, jadi petugas dermaga
@@ -3252,7 +3262,7 @@ async function tabPesanan(){
      begitu pesanan menumpuk, bulan-bulan lama hilang sama sekali dari daftar
      dan tidak ada tanda apa pun bahwa ada yang terpotong. */
   let q = DB.from('pesanan')
-    .select('kode,tipe,pax,anak,total,status,dibuat,tanggal_berangkat,kode_voucher_beku,'
+    .select('kode,tipe,pax,anak,balita,total,status,dibuat,tanggal_berangkat,kode_voucher_beku,'
            + 'pemesan_nama,pemesan_hp,pemesan_hp2,pemesan_alamat,biro_id,biro_nama,'
            + 'deposit_jam,deposit_sebab,harga_satuan_beku,dp_target,'
            /* Komisi DIKUNCI di baris pesanan sejak 11 Nov 2026. Dibaca, tidak
@@ -3314,7 +3324,7 @@ async function tabPesanan(){
             <td class="nw">${selWa(o.pemesan_hp, `Halo ${o.pemesan_nama}, ini dari The Tamperan Cruise soal pesanan ${o.kode}.`)}${
               selWa2(o.pemesan_hp2, o.pemesan_nama, o.kode)}</td>
             <td class="nw">${esc(o.produk?.nama)}${selAddon(o.kode)}</td>
-            <td class="num nw">${o.pax}${o.anak?` <span class="pill p-warn">${o.anak} anak</span>`:''}</td>
+            <td class="num nw">${o.pax}${o.anak?` <span class="pill p-warn">${o.anak} anak</span>`:''}${pillBalita(o)}</td>
             <td class="nw">${o.agen?`<span class="nama" style="max-width:130px" title="${esc(o.agen.nama)}">${esc(o.agen.nama)}</span>`
               :'<span class="pill p-mute">LANGSUNG</span>'}</td>
             <td class="nw"><span class="pill ${st[1]}">${st[0]}</span></td>
@@ -4801,7 +4811,10 @@ async function popPesananBiro(b){
         <div class="hint">1&ndash;200. Cukup jumlahnya &mdash; nama penumpang satu per satu tidak dikumpulkan.</div></div>
       <div class="fld"><label for="pb-anak">Di antaranya anak</label>
         <input id="pb-anak" inputmode="numeric" maxlength="3" value="0">
-        <div class="hint">Untuk pendataan saja, tidak mengubah harga.</div></div>
+        <div class="hint">Anak di bawah 12 tahun, untuk life jacket. Tidak mengubah harga.</div></div>
+      <div class="fld"><label for="pb-balita">Di antaranya balita di bawah 5 tahun <span class="pill p-ok">GRATIS</span></label>
+        <input id="pb-balita" inputmode="numeric" maxlength="3" value="0">
+        <div class="hint">Tidak dikenai harga tiket. Sudah termasuk di jumlah anak.</div></div>
     </div>
 
     <div class="fld">
@@ -4859,7 +4872,7 @@ async function popPesananBiro(b){
     </div>`, true);
 
   const el = {
-    produk: q('#pb-produk'), pax: q('#pb-pax'), anak: q('#pb-anak'),
+    produk: q('#pb-produk'), pax: q('#pb-pax'), anak: q('#pb-anak'), balita: q('#pb-balita'),
     nego: q('#pb-nego'), harga: q('#pb-harga'), lokal: q('#pb-lokal'),
     dp: q('#pb-dp'), ringkas: q('#pb-ringkas'),
     fldHarga: q('#pb-fld-harga'), fldLokal: q('#pb-fld-lokal'),
@@ -4893,11 +4906,13 @@ async function popPesananBiro(b){
         + 'untuk melihat totalnya.</div>';
       return null;
     }
-    const sub   = satuan * pax;
+    const blt   = Math.min(Math.max(parseInt(el.balita.value, 10) || 0, 0), Math.max(pax - 1, 0));
+    const sub   = satuan * (pax - blt);
     const disk  = Math.round(sub * persen / 100);
     const total = sub - disk;
     el.ringkas.innerHTML = `
-      <div class="uang"><span>${pax} orang &times; ${rp(satuan)}</span><b>${rp(sub)}</b></div>
+      <div class="uang"><span>${pax - blt} orang &times; ${rp(satuan)}</span><b>${rp(sub)}</b></div>
+      ${blt ? `<div class="uang"><span>${blt} balita di bawah 5 tahun</span><b style="color:var(--ok)">gratis</b></div>` : ''}
       ${persen ? `<div class="uang"><span>Diskon biro ${persen}%</span>
         <b style="color:var(--ok)">&minus;${rp(disk)}</b></div>` : ''}
       <div class="uang"><span>Total tagihan</span>
@@ -4905,7 +4920,7 @@ async function popPesananBiro(b){
     return { total, satuan, persen, pax };
   };
 
-  [el.produk, el.pax, el.anak, el.harga, el.dp].forEach(i =>
+  [el.produk, el.pax, el.anak, el.balita, el.harga, el.dp].forEach(i =>
     i.oninput = hitungUlang);
   [el.nego, el.lokal].forEach(i => i.onchange = hitungUlang);
   hitungUlang();
@@ -4923,6 +4938,10 @@ async function popPesananBiro(b){
     if (!(pax >= 1 && pax <= 200))   return pesan('Jumlah orang harus 1&ndash;200.', 7000);
     if (!(anak >= 0 && anak <= pax)) return pesan('Jumlah anak tidak boleh lebih '
                                                 + 'dari jumlah orang.', 7000);
+    const balita = parseInt(el.balita.value, 10) || 0;
+    if (balita < 0 || balita > anak) return pesan('Jumlah balita tidak boleh lebih dari jumlah anak. '
+                                                + 'Balita juga dihitung sebagai anak.', 8000);
+    if (balita >= pax)               return pesan('Minimal satu penumpang berbayar.', 7000);
     if (!tg)                         return pesan('Tanggal berangkat belum diisi.', 6000);
     if (tg < hariIni)                return pesan('Tanggal berangkat sudah lewat.', 7000);
     if (el.nego.checked && angkaRp(el.harga.value) == null)
@@ -4939,6 +4958,7 @@ async function popPesananBiro(b){
       p_produk_slug:  el.produk.value,
       p_pax:          pax,
       p_anak:         anak,
+      p_balita:       balita,
       p_tanggal:      tg,
       p_harga_satuan: el.nego.checked ? angkaRp(el.harga.value) : null,
       p_lokal:        !el.nego.checked && el.lokal.checked,
@@ -5109,7 +5129,7 @@ async function tabManifest(){
   S.addonPeta = await muatAddon();
 
   const [{data:ord, error:e1}, {data:atur}] = await Promise.all([
-    DB.from('pesanan').select('kode,tipe,pax,anak,jml_naik,status,tanggal_berangkat,dibuat,'
+    DB.from('pesanan').select('kode,tipe,pax,anak,balita,jml_naik,status,tanggal_berangkat,dibuat,'
       + 'pemesan_nama,pemesan_hp,pemesan_alamat,biro_nama,biro_pic,'
       + 'produk(nama),kapal(nama)')
       .in('status',['paid','boarded']).order('tanggal_berangkat'),
@@ -5178,7 +5198,8 @@ async function tabManifest(){
             <td class="nw">${esc(o.produk?.nama)}${selAddon(o.kode)}</td>
             <td class="num">${o.pax}</td>
             <td class="num">${o.anak
-              ? `<span class="pill p-warn">${o.anak}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+              ? `<span class="pill p-warn">${o.anak}</span>` : '<span style="color:var(--muted)">—</span>'}${
+              o.balita ? `<div class="hint" style="color:var(--ok);white-space:nowrap">${o.balita} balita</div>` : ''}</td>
             <td class="num nw" data-urut="${o.jml_naik || 0}"><span class="pill ${
               (o.jml_naik || 0) >= o.pax ? 'p-ok' : (o.jml_naik ? 'p-warn' : 'p-mute')
               }">${o.jml_naik || 0}/${o.pax}</span>${
@@ -5340,7 +5361,7 @@ async function siapkanIsiEkspor(periode, pilih, lapor){
   })() : null;
 
   lapor('Mengambil pesanan…');
-  const KOLOM_PESANAN = 'id,kode,tipe,pax,anak,status,dibuat,tanggal_berangkat,'
+  const KOLOM_PESANAN = 'id,kode,tipe,pax,anak,balita,status,dibuat,tanggal_berangkat,'
     + 'pemesan_nama,pemesan_hp,pemesan_alamat,biro_nama,harga_satuan_beku,subtotal,'
     + 'diskon_nominal,tambahan_nominal,kode_unik,total,kode_voucher_beku,jml_naik,'
     + 'komisi_persen,komisi_nominal,komisi_tiket_kumulatif,'
@@ -5410,13 +5431,14 @@ async function siapkanIsiEkspor(periode, pilih, lapor){
 
   if (pilih.pesanan) isi.sheet.push({
     nama: 'Pesanan', judul: 'Daftar Pesanan',
-    ket: 'Semua pesanan yang dibuat di periode ini, semua status. Dasar tanggal: tanggal pesanan dibuat. Total = Subtotal - Diskon + Add-on + Kode unik; komisi dihitung tanpa kode unik.',
+    ket: 'Semua pesanan yang dibuat di periode ini, semua status. Dasar tanggal: tanggal pesanan dibuat. Subtotal = Harga satuan x (Orang - Balita gratis). Total = Subtotal - Diskon + Add-on + Kode unik; komisi dihitung tanpa kode unik.',
     beku: 1,
     kolom: [
       { h:'Kode', t:'teks', w:13 }, { h:'Dibuat', t:'jam', w:17 }, { h:'Berangkat', t:'tgl', w:13 },
       { h:'Tipe', t:'teks', w:11 }, { h:'Pemesan', t:'teks', w:24 }, { h:'WhatsApp', t:'hp', w:15 },
       { h:'Biro', t:'teks', w:20 }, { h:'Agen', t:'teks', w:17 }, { h:'Produk', t:'teks', w:16 },
       { h:'Orang', t:'angka', w:8, total:1 }, { h:'Anak', t:'angka', w:7, total:1 },
+      { h:'Balita gratis', t:'angka', w:9, total:1 },
       { h:'Harga satuan', t:'rp', w:14 }, { h:'Subtotal', t:'rp', w:15, total:1 },
       { h:'Diskon', t:'rp', w:13, total:1 }, { h:'Add-on', t:'rp', w:13, total:1 },
       { h:'Rincian add-on', t:'teks', w:30 },
@@ -5430,7 +5452,7 @@ async function siapkanIsiEkspor(periode, pilih, lapor){
       const b = bayarPer[o.kode] || {};
       return [o.kode, o.dibuat, o.tanggal_berangkat, o.tipe === 'biro' ? 'Biro' : 'Perorangan',
         o.pemesan_nama, o.pemesan_hp, o.biro_nama, o.agen?.nama, o.produk?.nama,
-        o.pax, o.anak, o.harga_satuan_beku, o.subtotal, o.diskon_nominal, o.tambahan_nominal,
+        o.pax, o.anak, o.balita || 0, o.harga_satuan_beku, o.subtotal, o.diskon_nominal, o.tambahan_nominal,
         teksAddon(addonPeta[o.kode]) || null, o.kode_unik, o.total, b.r_dibayar, b.r_sisa, o.kode_voucher_beku, labelStatus(o.status), o.kapal?.nama,
         o.jml_naik, o.komisi_persen, o.komisi_nominal, o.komisi_tiket_kumulatif];
     }),
@@ -5485,13 +5507,14 @@ async function siapkanIsiEkspor(periode, pilih, lapor){
         { h:'Biro', t:'teks', w:20 }, { h:'Produk', t:'teks', w:16 },
         { h:'Add-on', t:'teks', w:30 },
         { h:'Orang', t:'angka', w:8, total:1 }, { h:'Anak', t:'angka', w:7, total:1 },
+        { h:'Balita gratis', t:'angka', w:9, total:1 },
         { h:'Sudah naik', t:'angka', w:10, total:1 },
         ...(alamat ? [{ h:'Alamat sesuai KTP', t:'teks', w:44 }] : []),
         { h:'Status', t:'status', w:15 },
       ],
       baris: berangkat.map(o => [o.tanggal_berangkat, o.kapal?.nama || 'belum', o.kode, o.dibuat,
         o.pemesan_nama, o.pemesan_hp, o.biro_nama, o.produk?.nama, teksAddon(addonPeta[o.kode]) || null,
-        o.pax, o.anak, o.jml_naik,
+        o.pax, o.anak, o.balita || 0, o.jml_naik,
         ...(alamat ? [o.pemesan_alamat] : []), labelStatus(o.status)]),
     });
   }
@@ -6698,7 +6721,7 @@ async function tabKapal(){
        pernah dinonaktifkan tidak akan pernah bisa diaktifkan lagi dari layar. */
     DB.from('kapal').select('id,nama,kapasitas,aktif,urutan').order('urutan'),
     DB.from('pesanan')
-      .select('id,kode,pax,anak,status,tanggal_berangkat,dibuat,kapal_id,pemesan_nama,tipe,produk:produk_id(nama)')
+      .select('id,kode,pax,anak,balita,status,tanggal_berangkat,dibuat,kapal_id,pemesan_nama,tipe,produk:produk_id(nama)')
       .not('tanggal_berangkat','is',null)
       .in('status',['pending','waiting','paid','boarded'])
       .order('tanggal_berangkat')
@@ -6808,7 +6831,7 @@ async function tabKapal(){
             <td class="nw"><span class="nama" title="${esc(o.pemesan_nama)}">${esc(o.pemesan_nama)}</span>${
               o.tipe==='biro'?' <span class="pill p-sea">BIRO</span>':''}</td>
             <td class="nw">${esc(o.produk?.nama)}${selAddon(o.kode)}</td>
-            <td class="num nw">${o.pax}${o.anak?` <span class="pill p-warn">${o.anak} anak</span>`:''}</td>
+            <td class="num nw">${o.pax}${o.anak?` <span class="pill p-warn">${o.anak} anak</span>`:''}${pillBalita(o)}</td>
             <td class="nw"><span class="pill ${st[1]}">${st[0]}</span></td>
             <td class="nw"><select data-kapal="${o.id}" data-lama="${o.kapal_id || ''}"
               style="width:132px;padding:5px 7px;font-size:13px">
@@ -8527,7 +8550,7 @@ async function tabKomisi(){
 async function tabBoarding(){
   S.addonPeta = await muatAddon();
   const { data, error } = await DB.from('pesanan')
-    .select('kode,pax,anak,tipe,status,tanggal_berangkat,dibuat,pemesan_nama,biro_nama,'
+    .select('kode,pax,anak,balita,tipe,status,tanggal_berangkat,dibuat,pemesan_nama,biro_nama,'
           + 'jml_naik,deposit_jam,produk(nama),kapal(nama)')
     .in('status',['paid','boarded','waiting']).order('tanggal_berangkat');
   if (error) return gagal(error);
@@ -8577,7 +8600,8 @@ async function tabBoarding(){
               o.biro_nama ? `<div class="hint nama" style="max-width:190px"
                 title="${esc(o.biro_nama)}">${esc(o.biro_nama)}</div>` : ''}</td>
             <td class="nw">${esc(o.produk?.nama)}${selAddon(o.kode)}</td>
-            <td class="num">${o.pax}${o.anak?`<div class="hint" style="color:var(--warn)">${o.anak} anak</div>`:''}</td>
+            <td class="num">${o.pax}${o.anak?`<div class="hint" style="color:var(--warn)">${o.anak} anak</div>`:''}${
+              o.balita?`<div class="hint" style="color:var(--ok)">${o.balita} balita gratis</div>`:''}</td>
             <td class="nw" data-sel-naik="${esc(o.kode)}"
                 data-urut="${o.jml_naik||0}">${selNaik(o, bisaCatat)}</td>
             <td class="nw"><span class="pill ${(STATUS[o.status]||['','p-mute'])[1]}">${

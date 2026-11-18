@@ -1178,6 +1178,15 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
             <div class="hint">Dipakai untuk menyiapkan life jacket ukuran anak.</div>
           </div>
         </div>
+        <!-- 18 Nov 2026: balita di bawah 5 tahun gratis di semua paket.
+             Tetap dihitung sebagai penumpang (kursi & life jacket), tapi tidak
+             dikenai harga tiket. Bagian dari jumlah anak di atas. -->
+        <div class="fld" id="fld-balita">
+          <label for="f-balita">Di antaranya balita di bawah 5 tahun <span class="pill p-ok" style="font-size:11px">GRATIS</span></label>
+          <input id="f-balita" type="number" min="0" value="0" inputmode="numeric" style="max-width:200px">
+          <div class="hint">Balita di bawah 5 tahun tidak dikenai harga tiket. Tetap dihitung
+            sebagai penumpang dan sudah termasuk di jumlah anak di atas.</div>
+        </div>
 
         <!-- Kode voucher: terpisah dari kode agen. Agen membagikannya lewat chat. -->
         <div class="fld" id="fld-voucher">
@@ -1355,7 +1364,7 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
          dinaikkan TERPISAH ke Vercel, jadi dua-duanya perlu nomor sendiri:
          kalau cuma satu yang punya, salah satu bisa tertinggal tanpa ketahuan.
          Perbarui baris ini tiap kali berkas ini dikirim ulang. -->
-    <span style="opacity:.55;font-size:11.5px">versi 2026-11-18b</span>
+    <span style="opacity:.55;font-size:11.5px">versi 2026-11-18c</span>
   </footer>
 </div>
 
@@ -1912,6 +1921,10 @@ function hitungAnak(){
   const a = parseInt($('f-anak').value, 10);
   return Number.isFinite(a) && a >= 0 ? a : 0;
 }
+function hitungBalita(){
+  const a = parseInt($('f-balita').value, 10);
+  return Number.isFinite(a) && a >= 0 ? a : 0;
+}
 
 /* ====================== GALERI FOTO ======================
    Dibaca LANGSUNG dari tabel galeri, bukan lewat fungsi khusus: RLS yang
@@ -2109,7 +2122,12 @@ function ringkasan(){
   /* Tingkat harga ditentukan voucher yang SUDAH diperiksa, bukan pilihan pemesan. */
   const pakaiVou = p.bertingkat && S.vouOk;
   const satuan = p.bertingkat ? (pakaiVou ? p.harga_lokal : p.harga_umum) : p.harga_flat;
-  const sub = satuan * n;
+  /* Balita gratis: dikali jumlah penumpang BERBAYAR saja, sama dengan
+     buat_pesanan() di database. Dijepit supaya angka asal-asalan di kolom
+     balita tidak membuat subtotal minus di layar. */
+  const balita = Math.min(hitungBalita(), Math.max(n - 1, 0));
+  const bayar  = n - balita;
+  const sub = satuan * bayar;
   /* 13 Nov 2026 (Kak Mer): diskon HANYA untuk pesanan dengan kode agen yang
      SAH. buat_pesanan() memakai aturan yang sama (jalur langsung = 0%), jadi
      angka di layar tetap sama dengan yang tersimpan. Syaratnya S.agenNama,
@@ -2130,11 +2148,12 @@ function ringkasan(){
   const totalTamb = tamb.reduce((a,b) => a + b.total, 0);
 
   $('ringkas').innerHTML =
-    `<div class="rk"><span>${esc(p.nama)} — ${rp(satuan)} × ${n} orang${
+    `<div class="rk"><span>${esc(p.nama)} — ${rp(satuan)} × ${bayar} orang${
        pakaiVou ? ' <span class="pill p-ok">HARGA VOUCHER</span>' : ''}</span><span>${rp(sub)}</span></div>`
     + (persen ? `<div class="rk"><span>Diskon kode agen (${persen}%)</span><span>− ${rp(pot)}</span></div>` : '')
     + tamb.map(t => `<div class="rk"><span>${esc(t.nama)}${
          t.jml > 1 ? ` × ${t.jml}` : ''}</span><span>+ ${rp(t.total)}</span></div>`).join('')
+    + (balita ? `<div class="rk"><span>Balita di bawah 5 tahun</span><span>${balita} orang · gratis</span></div>` : '')
     + (anak ? `<div class="rk"><span>Anak di bawah 12 tahun</span><span>${anak} orang · life jacket anak</span></div>` : '')
     + `<div class="rk"><span>Perkiraan total</span><span>${rp(sub - pot + totalTamb)}</span></div>`;
 
@@ -2212,6 +2231,10 @@ async function kirim(){
 
   const anak = hitungAnak();
   if (anak > n) return pesan('Jumlah anak tidak boleh melebihi jumlah penumpang.');
+  const balita = hitungBalita();
+  if (balita > anak) return pesan('Jumlah balita tidak boleh lebih dari jumlah anak di bawah 12 tahun. '
+    + 'Balita juga dihitung sebagai anak.', 9000);
+  if (balita >= n) return pesan('Minimal satu penumpang berbayar. Balita harus didampingi.', 8000);
 
   tombol.disabled = true;
   tombol.innerHTML = '<span class="spin"></span> Menyimpan…';
@@ -2221,6 +2244,7 @@ async function kirim(){
     p_tipe:          S.tipe,
     p_pax:           n,
     p_anak:          anak,
+    p_balita:        balita,
     p_tanggal:       $('f-tgl').value,
     p_kode_referral: S.kodeRef,
     p_kode_voucher:  (p.bertingkat && S.vouOk) ? S.vouKode : null,
@@ -2917,6 +2941,7 @@ $('f-vou').onkeydown   = e => { if (e.key === 'Enter'){ e.preventDefault(); cekV
 $('f-vou').oninput     = () => { if (S.vouOk) { S.vouOk=false; S.vouKode=null;
   $('vou-ket').textContent='Tekan Periksa untuk memeriksa kode ini.'; ringkasan(); } };
 $('f-anak').oninput    = ringkasan;
+$('f-balita').oninput  = ringkasan;
 $('kirim').onclick     = kirim;
 $('tombol-tutor').onclick = () => mulaiTutor(true);
 

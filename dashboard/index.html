@@ -250,6 +250,9 @@ a.ghost{background:#fff;color:var(--sea);border-color:#8fb3c9}
 a.matikan{background:var(--warnbg);color:var(--warn);border-color:#a8761b}
 a.hidupkan{background:var(--okbg);color:var(--ok);border-color:#3f8a63}
 .sel2{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+/* Kolom Tindakan di tab Pesanan: tombol berjajar dan boleh turun baris,
+   terpisah dari kolom Status (18 Nov 2026). */
+.tindakan{display:flex;flex-wrap:wrap;gap:6px;min-width:170px;max-width:260px}
 .mono{font-family:ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
 .pill{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.3px;
       padding:2px 8px;border-radius:99px;white-space:nowrap;border:1px solid}
@@ -815,6 +818,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-18c', 'Tab Pesanan: tombol tindakan dipisah dari status ke kolom Tindakan sendiri'],
   ['2026-11-18b', 'Pop-up Add-on diperjelas: keterangan sudah dipesan, tombol tambah/kurang, dan akibatnya pada tagihan'],
   ['2026-11-18a', 'Add-on tampil di Pesanan, Manifest, Pembagian kapal, Boarding, Pelanggan Saya dan ekspor; add-on bisa ditambah atau diubah sesudah pesanan dibuat'],
   ['2026-11-13e', 'Diskon pembeli hanya untuk pesanan yang mencantumkan kode agen; keterangan di Pengaturan diperbarui'],
@@ -3267,7 +3271,7 @@ async function tabPesanan(){
         <thead><tr><th class="nw">Kode</th><th class="nw">Dipesan</th><th class="nw">Berangkat</th>
             <th>Pembeli</th><th class="nw">WhatsApp</th><th class="nw">Produk</th>
             <th class="num">Orang</th><th class="nw">Agen</th>
-            <th class="nw">Status</th><th class="num">Total</th>${
+            <th class="nw">Status</th><th class="nw">Tindakan</th><th class="num">Total</th>${
             /* Admin tidak melihat komisi — sama dengan kolom Nilai di layar
                Keberangkatan, dan sama dengan penjagaan di database. */
             '<th class="num">Komisi agen</th>'}</tr></thead><tbody>
@@ -3292,8 +3296,11 @@ async function tabPesanan(){
             <td class="num nw">${o.pax}${o.anak?` <span class="pill p-warn">${o.anak} anak</span>`:''}</td>
             <td class="nw">${o.agen?`<span class="nama" style="max-width:130px" title="${esc(o.agen.nama)}">${esc(o.agen.nama)}</span>`
               :'<span class="pill p-mute">LANGSUNG</span>'}</td>
-            <td class="nw"><span class="sel2" style="flex-wrap:wrap"><span class="pill ${st[1]}">${st[0]}</span>${
-              aksiStatus(o)}</span></td>
+            <td class="nw"><span class="pill ${st[1]}">${st[0]}</span></td>
+            ${/* 18 Nov 2026 (Kak Mer): tombol dulu satu sel dengan status, jadi
+                 "LUNAS" dan "Catat bayar" bertumpuk dan susah dibaca mana yang
+                 sudah bayar. Sekarang status berdiri sendiri, tombol di sini. */''}
+            <td><div class="tindakan">${aksiStatus(o) || '<span style="color:var(--muted)">&mdash;</span>'}</div></td>
             <td class="num nw" data-urut="${o.total}">${rp(o.total)}${o.kode_unik
               ? `<div class="hint" title="Kode unik transfer: 3 angka terakhir total">kode unik ${o.kode_unik}</div>` : ''}${selBayar(o, bayarPeta[o.kode])}</td>${
             `<td class="num nw" data-urut="${o.komisi_nominal||0}">${
@@ -3316,11 +3323,11 @@ async function tabPesanan(){
   lengkapiTabel('#isi table[data-papan="pesanan"]', {
     id: 'pesanan',
     petunjuk: 'Cari kode, pembeli, produk, agen…',
-    /* Kolom 9 = Total (ada tombol Catat bayar di dalamnya), kolom 10 = Komisi.
+    /* Kolom 9 = Tindakan, 10 = Total, 11 = Komisi (sejak 18 Nov 2026).
        Keduanya tidak diurut lewat teks: isinya bercampur tombol dan keterangan.
        Kolom 10 cuma ada kalau bukan Admin, dan menyebutnya walau tidak ada
        tidak apa-apa — lengkapiTabel() melewati indeks yang kosong. */
-    takUrut: [9, 10],
+    takUrut: [9, 10, 11],
     saring: [
       { kolom: 8, semua: 'Semua status',
         pilihan: [...new Set((data||[]).map(o => (STATUS[o.status]||[o.status])[0]))] },

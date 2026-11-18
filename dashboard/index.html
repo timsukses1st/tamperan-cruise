@@ -815,6 +815,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-18b', 'Pop-up Add-on diperjelas: keterangan sudah dipesan, tombol tambah/kurang, dan akibatnya pada tagihan'],
   ['2026-11-18a', 'Add-on tampil di Pesanan, Manifest, Pembagian kapal, Boarding, Pelanggan Saya dan ekspor; add-on bisa ditambah atau diubah sesudah pesanan dibuat'],
   ['2026-11-13e', 'Diskon pembeli hanya untuk pesanan yang mencantumkan kode agen; keterangan di Pengaturan diperbarui'],
   ['2026-11-13d', 'Kotak bayar pakai saldo deposit langsung terbuka di Catat bayar, tanpa klik selengkapnya'],
@@ -3818,48 +3819,59 @@ async function popAddon(kode, muatUlang){
   if (e1) return gagalPesan(e1);
   const r = Array.isArray(rs) ? rs[0] : rs;
   const ada = Object.fromEntries((peta[kode] || []).map(x => [x.tambahan?.slug, x]));
-  /* Yang ditampilkan: semua add-on aktif + add-on nonaktif yang sudah
-     terlanjur ada di pesanan ini (supaya tetap bisa dikurangi). */
   const daftar = (kat || []).filter(t => t.aktif || ada[t.slug]);
   if (!daftar.length) return pesan('Belum ada add-on yang aktif. Tambahkan dulu di Pengaturan.', 8000);
   const pax = pd?.pax || 1;
   const lunas = r && r.r_dibayar > 0 && r.r_sisa === 0;
+  const hargaDari = t => ada[t.slug] ? ada[t.slug].harga_beku : t.harga;
+  const kali = (t, jml) => t.satuan === 'unit' ? jml : t.satuan === 'orang' ? pax : 1;
+  const nilaiLama = (peta[kode] || []).reduce((a, x) => a + x.jumlah * x.harga_beku, 0);
+  const jmlAwal = t => ada[t.slug] ? (t.satuan === 'unit' ? ada[t.slug].jumlah : 1) : 0;
 
+  /* 18 Nov 2026 (Kak Mer bingung): dulu kotak angka langsung berisi "5" dan
+     di bawahnya dua nominal yang sama persis, jadi tidak jelas mana yang
+     sudah dipesan dan mana yang akan berubah. Sekarang: tiap baris menulis
+     keadaannya ("Sudah dipesan 5 unit"), jumlah diubah dengan tombol − / +,
+     dan bagian bawah hanya menampilkan AKIBAT pada tagihan kalau memang ada
+     perubahan. */
   const baris = t => {
-    const x = ada[t.slug];
-    const hrg = x ? x.harga_beku : t.harga;
-    const ket = t.satuan === 'unit' ? 'per unit' : t.satuan === 'orang' ? `per orang × ${pax}` : 'per pesanan';
+    const hrg = hargaDari(t), awal = jmlAwal(t);
+    const per = t.satuan === 'unit' ? '/unit' : t.satuan === 'orang' ? `/orang × ${pax} orang` : '/pesanan';
     const kendali = t.satuan === 'unit'
-      ? `<input data-ad="${esc(t.slug)}" inputmode="numeric" value="${x ? x.jumlah : 0}"
-           aria-label="Jumlah ${esc(t.nama)}" style="width:80px;text-align:right">`
-      : `<label style="display:flex;gap:6px;align-items:center;margin:0;font-weight:600">
-           <input type="checkbox" data-ad="${esc(t.slug)}" ${x ? 'checked' : ''}
-             style="width:auto;flex:none"> Pakai</label>`;
-    return `<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;
-                        padding:10px 0;border-bottom:1px dashed var(--line)">
-      <div><b>${esc(t.nama)}</b>${!t.aktif ? ' <span class="pill p-mute">NONAKTIF</span>' : ''}
-        <div class="hint" style="margin:2px 0 0">${rp(hrg)} ${ket}${
-          x && x.harga_beku !== t.harga ? ` (harga saat dipesan, katalog sekarang ${rp(t.harga)})` : ''}</div></div>
-      <div style="flex:none">${kendali}</div></div>`;
+      ? `<div style="display:flex;align-items:center;gap:6px">
+           <button type="button" class="btn ghost" data-kurang="${esc(t.slug)}" aria-label="Kurangi"
+             style="width:38px;padding:8px 0">&minus;</button>
+           <input data-ad="${esc(t.slug)}" inputmode="numeric" value="${awal}" aria-label="Jumlah ${esc(t.nama)}"
+             style="width:56px;text-align:center;font-weight:700">
+           <button type="button" class="btn ghost" data-tambah="${esc(t.slug)}" aria-label="Tambah"
+             style="width:38px;padding:8px 0">+</button></div>`
+      : `<label style="display:flex;gap:7px;align-items:center;margin:0;font-weight:600;cursor:pointer">
+           <input type="checkbox" data-ad="${esc(t.slug)}" ${awal ? 'checked' : ''}
+             style="width:18px;height:18px;flex:none"> Pakai</label>`;
+    return `<div style="padding:12px 0;border-bottom:1px dashed var(--line)">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center">
+        <div><b>${esc(t.nama)}</b>${!t.aktif ? ' <span class="pill p-mute">NONAKTIF</span>' : ''}
+          <div class="hint" style="margin:2px 0 0">${rp(hrg)}${per}</div></div>
+        <div style="flex:none">${kendali}</div>
+      </div>
+      <div class="hint" style="margin:6px 0 0" data-ket="${esc(t.slug)}"></div>
+    </div>`;
   };
 
   const { q, tutup } = bukaLapis(`
     <h3>Add-on ${esc(kode)}</h3>
-    <div class="hint" style="margin-bottom:8px">Ubah lalu simpan. Total tagihan dihitung ulang
-      otomatis dan perubahannya tercatat atas nama Anda.</div>
+    <div class="hint" style="margin-bottom:4px">Centang atau ubah jumlahnya, lalu simpan.
+      Tagihan dihitung ulang otomatis.</div>
     <div>${daftar.map(baris).join('')}</div>
-    <div class="uang" style="margin-top:12px"><span>Add-on sekarang</span><b>${
-      rp((peta[kode] || []).reduce((a, x) => a + x.jumlah * x.harga_beku, 0))}</b></div>
-    <div class="uang"><span>Add-on sesudah diubah</span><b id="ad-baru">&ndash;</b></div>
-    ${lunas ? `<div class="note w" style="margin-top:12px"><b>Pesanan ini sudah lunas</b>
-      Kalau add-on ditambah, statusnya kembali <b>sebagian bayar</b> sampai kekurangannya
-      dicatat, dan selama itu pesanan tidak tampil di daftar Petugas Boarding. Sesudah
-      menyimpan, formulir Catat bayar langsung terbuka supaya kekurangannya bisa langsung
-      dicatat (tunai, transfer, atau saldo deposit).${pd && pd.komisi_nominal != null
-        ? ' Komisi agen tetap seperti semula, add-on susulan tidak menambah komisi.' : ''}</div>` : ''}
+    <div id="ad-akibat" style="margin-top:12px"></div>
+    ${lunas ? `<div class="note w" id="ad-lunas" style="margin-top:12px;display:none"><b>Pesanan ini sudah lunas</b>
+      Sesudah disimpan, statusnya kembali <b>sebagian bayar</b> dan formulir Catat bayar
+      langsung terbuka untuk mencatat kekurangannya. Selama belum dicatat, pesanan ini
+      tidak tampil di daftar Petugas Boarding.${pd && pd.komisi_nominal != null
+        ? ' Komisi agen tidak berubah.' : ''}</div>` : ''}
     <div class="aksi-bar">
-      <button type="button" class="btn ghost tbl-tutup">Batal</button>
-      <button type="button" class="btn" id="ad-simpan">Simpan add-on</button>
+      <button type="button" class="btn ghost tbl-tutup">Tutup</button>
+      <button type="button" class="btn" id="ad-simpan" disabled>Belum ada perubahan</button>
     </div>`);
   q('.tbl-tutup').onclick = tutup;
 
@@ -3869,16 +3881,46 @@ async function popAddon(kode, muatUlang){
     return { t, jml };
   });
   const hitung = () => {
-    let n = 0, salah = false;
+    let n = 0, salah = false, berubah = false;
     kumpul().forEach(({ t, jml }) => {
-      if (jml < 0) { salah = true; return; }
-      if (!jml) return;
-      const hrg = ada[t.slug] ? ada[t.slug].harga_beku : t.harga;
-      n += hrg * (t.satuan === 'unit' ? jml : t.satuan === 'orang' ? pax : 1);
+      const awal = jmlAwal(t), ket = q(`[data-ket="${t.slug}"]`);
+      if (jml < 0) { salah = true; ket.innerHTML = '<span style="color:var(--danger)">Isi angka 0 atau lebih.</span>'; return; }
+      if (jml !== awal) berubah = true;
+      if (jml) n += hargaDari(t) * kali(t, jml);
+      const satuan = t.satuan === 'unit' ? ' unit' : '';
+      const lama = awal ? `Sudah dipesan${t.satuan === 'unit' ? ` <b>${awal}${satuan}</b>` : ''}` : 'Belum dipesan';
+      ket.innerHTML = jml === awal
+        ? `<span style="color:${awal ? 'var(--ok)' : 'var(--muted)'}">${lama}</span>`
+        : `${lama} &rarr; <b style="color:var(--sea)">${jml ? (t.satuan === 'unit' ? jml + satuan : 'dipakai') : 'dihapus'}</b>`;
     });
-    q('#ad-baru').textContent = salah ? 'angka tidak sah' : rp(n);
+    const selisih = n - nilaiLama, btn = q('#ad-simpan');
+    if (salah){ btn.disabled = true; btn.textContent = 'Periksa jumlahnya'; }
+    else if (!berubah){ btn.disabled = true; btn.textContent = 'Belum ada perubahan'; }
+    else { btn.disabled = false; btn.textContent = 'Simpan add-on'; }
+    const kotak = q('#ad-akibat');
+    if (salah || !berubah || !r){ kotak.innerHTML = ''; }
+    else {
+      const totalBaru = r.r_total + selisih, sisaBaru = totalBaru - r.r_dibayar;
+      kotak.innerHTML = `
+        <div class="uang"><span>Total pesanan sekarang</span><b>${rp(r.r_total)}</b></div>
+        <div class="uang"><span>${selisih >= 0 ? 'Tambahan' : 'Berkurang'}</span>
+          <b style="color:${selisih >= 0 ? 'var(--warn)' : 'var(--ok)'}">${selisih >= 0 ? '+' : '&minus;'}${rp(Math.abs(selisih))}</b></div>
+        <div class="uang"><span>Total sesudah disimpan</span><b>${rp(totalBaru)}</b></div>
+        <div class="uang"><span>Yang masih harus dibayar</span><b style="color:${
+          sisaBaru > 0 ? 'var(--warn)' : sisaBaru < 0 ? 'var(--danger)' : 'var(--ok)'}">${
+          sisaBaru < 0 ? 'tidak bisa, sudah dibayar ' + rp(r.r_dibayar) : rp(sisaBaru)}</b></div>`;
+      if (sisaBaru < 0){ btn.disabled = true; btn.textContent = 'Tidak bisa disimpan'; }
+    }
+    const nl = q('#ad-lunas'); if (nl) nl.style.display = berubah && selisih > 0 ? '' : 'none';
   };
   q('.kotak').querySelectorAll('[data-ad]').forEach(el => { el.oninput = hitung; el.onchange = hitung; });
+  q('.kotak').querySelectorAll('[data-tambah],[data-kurang]').forEach(b => b.onclick = () => {
+    const slug = b.dataset.tambah || b.dataset.kurang, el = q(`[data-ad="${slug}"]`);
+    const t = daftar.find(x => x.slug === slug);
+    let v = Math.max(angkaRp(el.value) ?? 0, 0) + (b.dataset.tambah ? 1 : -1);
+    if (v < 0) v = 0; if (t.maks && v > t.maks) v = t.maks;
+    el.value = v; hitung();
+  });
   hitung();
 
   q('#ad-simpan').onclick = async () => {
@@ -3896,7 +3938,7 @@ async function popAddon(kode, muatUlang){
     const h = Array.isArray(data) ? data[0] : data;
     tutup();
     pesan(`Add-on <b>${esc(kode)}</b> tersimpan. Total sekarang ${rp(h.r_total)}`
-      + (h.r_sisa > 0 ? `, kurang bayar <b>${rp(h.r_sisa)}</b>.` : '.'), 10000);
+      + (h.r_sisa > 0 ? `, masih harus dibayar <b>${rp(h.r_sisa)}</b>.` : '.'), 10000);
     await muatUlang();
     if (h.r_sisa > 0 && h.r_dibayar > 0) await popBayar(kode, muatUlang);
   };

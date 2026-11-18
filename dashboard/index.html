@@ -215,6 +215,10 @@ tr.kosong td{color:var(--muted);font-size:13px;padding:16px 8px}
    overflow-wrap juga diganti break-word: "anywhere" membuat browser mengira
    kolom nama boleh dipersempit sampai selebar satu huruf. */
 td.nw:has(> .nama){white-space:normal;min-width:140px}
+/* Rincian add-on di bawah nama paket (18 Nov 2026). Boleh turun baris di
+   dalam sel "nw" supaya nama add-on yang panjang tidak menembus kolom. */
+.addon{white-space:normal;max-width:220px;font-size:11.5px;line-height:1.35;
+  color:var(--sea);margin-top:3px;font-weight:600}
 /* Tautan aksi di dalam sel: jangan pernah jadi tombol balok */
 /* Badge aksi: ukurannya kecil supaya tidak menaikkan tinggi baris, tapi punya
    latar berwarna supaya terbaca sebagai tombol — bukan teks biasa. */
@@ -811,6 +815,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-18a', 'Add-on tampil di Pesanan, Manifest, Pembagian kapal, Boarding, Pelanggan Saya dan ekspor; add-on bisa ditambah atau diubah sesudah pesanan dibuat'],
   ['2026-11-13e', 'Diskon pembeli hanya untuk pesanan yang mencantumkan kode agen; keterangan di Pengaturan diperbarui'],
   ['2026-11-13d', 'Kotak bayar pakai saldo deposit langsung terbuka di Catat bayar, tanpa klik selengkapnya'],
   ['2026-11-13c', 'Lencana di samping nama tidak lagi menembus garis kolom; nomor HP selalu tampil berawalan 0'],
@@ -1243,8 +1248,8 @@ function dataLatihan(){
         pemesan_alamat:'Jl. Diponegoro No. 88, RT 01/RW 04, Kel. Baleharjo, Kec. Pacitan, Jawa Timur 63511',
         agen_id:AG.sari, produk:pr('Cruise PROMO'), agen:{nama:'Sari Wulandari'},
         kapal:{nama:'Kapal 1'}, jml_naik:2 },
-      { id:'o5', kode:'TTC-LAT05', tipe:'perorangan', pax:2, anak:0, total:665000,
-        subtotal:300000, diskon_nominal:15000, tambahan_nominal:380000,
+      { id:'o5', kode:'TTC-LAT05', tipe:'perorangan', pax:2, anak:0, total:685000,
+        subtotal:300000, diskon_nominal:15000, tambahan_nominal:400000,
         harga_satuan_beku:150000, deposit_jam:null, deposit_sebab:null,
         status:'boarded', fu_status:'jadi', fu_terakhir:null,
         dibuat:JAM(50), diubah:JAM(20), tanggal_berangkat:HARI(0), kapal_id:K1,
@@ -1294,8 +1299,8 @@ function dataLatihan(){
         kode_voucher_beku:null, pemesan_nama:'Nur Aisyah', pemesan_hp:'081200000010',
         agen_id:AG.sari, produk:pr('Cruise PROMO'), agen:{nama:'Sari Wulandari'}, kapal:null,
         jml_naik:0 },
-      { id:'o11', kode:'TTC-LAT11', tipe:'perorangan', pax:2, anak:0, total:665000,
-        subtotal:300000, diskon_nominal:15000, tambahan_nominal:380000,
+      { id:'o11', kode:'TTC-LAT11', tipe:'perorangan', pax:2, anak:0, total:585000,
+        subtotal:300000, diskon_nominal:15000, tambahan_nominal:300000,
         status:'pending', fu_status:'dihubungi', fu_terakhir:JAM(2),
         dibuat:JAM(8), diubah:JAM(2), tanggal_berangkat:HARI(4), kapal_id:null,
         kode_voucher_beku:'PACITAN', pemesan_nama:'Bagas Pratama', pemesan_hp:'081200000011',
@@ -1546,7 +1551,7 @@ function dataLatihan(){
       { id:'y3', pesanan_id:'o4', metode:'qris_statis', nominal_diterima:427500,
         referensi:'QRIS LAT04', catatan:null, waktu:JAM(25),
         diverifikasi_jam:JAM(25), oleh:'Uun Staf COO' },
-      { id:'y4', pesanan_id:'o5', metode:'tunai', nominal_diterima:665000,
+      { id:'y4', pesanan_id:'o5', metode:'tunai', nominal_diterima:685000,
         referensi:null, catatan:'Bayar di dermaga', waktu:JAM(20),
         diverifikasi_jam:JAM(20), oleh:'Uun Staf COO' },
       { id:'y5', pesanan_id:'o15', metode:'transfer', nominal_diterima:5000000,
@@ -1573,7 +1578,16 @@ function dataLatihan(){
         referensi:'BCA LAT18', catatan:'DP, lalu batal karena cuaca', waktu:JAM(290),
         diverifikasi_jam:JAM(290), oleh:'Dika Kurniawan' },
     ],
-    penumpang: [], audit: [], pesanan_tambahan: [],
+    penumpang: [], audit: [],
+    /* Add-on latihan, sudah "digabung" dengan kode pesanan & nama add-on karena
+       kueri tiruan tidak bisa menggabung tabel. Angkanya cocok dengan
+       tambahan_nominal di o5 (Drone 400.000) dan o11 (Paddleboard 2 × 150.000). */
+    pesanan_tambahan: [
+      { pesanan_id:'o5', tambahan_id:'t1', jumlah:1, harga_beku:400000, satuan_beku:'pesanan',
+        pesanan:{ kode:'TTC-LAT05' }, tambahan:{ slug:'drone-pilot', nama:'Drone + Pilot' } },
+      { pesanan_id:'o11', tambahan_id:'t2', jumlah:2, harga_beku:150000, satuan_beku:'unit',
+        pesanan:{ kode:'TTC-LAT11' }, tambahan:{ slug:'paddleboard', nama:'Sewa Paddleboard + Instruktur' } },
+    ],
   };
 }
 
@@ -1980,7 +1994,7 @@ function rpcLatihan(nama, arg = {}){
         waktu:new Date().toISOString(), diverifikasi_jam:new Date().toISOString(),
         oleh:'Anda (mode panduan)' });
       const r2 = ringkasLat(o);
-      if (r2.r_sisa === 0 && ['pending','waiting'].includes(o.status)) o.status = 'paid';
+      if (r2.r_sisa === 0 && ['pending','waiting'].includes(o.status)) o.status = o.jml_naik > 0 ? 'boarded' : 'paid';
       else if (r2.r_sisa > 0 && o.status === 'pending')                o.status = 'waiting';
       o.diubah = new Date().toISOString();
       kunciKomisiLatihan();                 /* meniru trg_kunci_komisi */
@@ -1994,6 +2008,38 @@ function rpcLatihan(nama, arg = {}){
 
     /* Cermin saldo_untuk_pesanan() dan bayar_pakai_deposit() di database. */
     saldo_untuk_pesanan: () => [saldoUntukLat(arg.p_kode, arg.p_hp_lain)],
+
+    /* Cermin ubah_tambahan() di database (18 Nov 2026). */
+    ubah_tambahan: () => {
+      if (!['super','admin'].includes(S.peran))
+        throw { code:'42501', message:'Hanya Super Admin atau Admin yang boleh mengubah add-on pesanan.' };
+      const o = P.find(x => x.kode === arg.p_kode);
+      if (!o) throw { code:'22023', message:`Pesanan ${arg.p_kode} tidak ditemukan.` };
+      if (['cancel_pembeli','cancel_cuaca','expired'].includes(o.status))
+        throw { code:'22023', message:`Pesanan ${o.kode} sudah dibatalkan, add-on tidak bisa diubah.` };
+      const lama = LATIH.pesanan_tambahan.filter(x => x.pesanan_id === o.id);
+      const baru = (arg.p_item || []).filter(i => i.jumlah > 0).map(i => {
+        const t = LATIH.tambahan.find(x => x.slug === i.slug);
+        if (!t) throw { code:'22023', message:`Add-on "${i.slug}" tidak dikenal.` };
+        const ada = lama.find(x => x.tambahan_id === t.id);
+        return { pesanan_id:o.id, tambahan_id:t.id,
+          jumlah: t.satuan === 'unit' ? i.jumlah : t.satuan === 'orang' ? o.pax : 1,
+          harga_beku: ada ? ada.harga_beku : t.harga, satuan_beku: t.satuan,
+          pesanan:{ kode:o.kode }, tambahan:{ slug:t.slug, nama:t.nama } };
+      });
+      const tamb = baru.reduce((a, x) => a + x.jumlah * x.harga_beku, 0);
+      const total = o.total - (o.tambahan_nominal || 0) + tamb;
+      const dibayar = ringkasLat(o).r_dibayar;
+      if (total < dibayar) throw { code:'22023', message:`Total baru Rp${total} lebih kecil dari uang `
+        + `yang sudah masuk Rp${dibayar}. Kurangi add-on tidak bisa melewati yang sudah dibayar.` };
+      LATIH.pesanan_tambahan = LATIH.pesanan_tambahan.filter(x => x.pesanan_id !== o.id).concat(baru);
+      o.tambahan_nominal = tamb; o.total = total; o.diubah = new Date().toISOString();
+      const sisa = total - dibayar;
+      if (sisa > 0 && ['paid','boarded'].includes(o.status)) o.status = 'waiting';
+      else if (sisa === 0 && dibayar > 0 && ['pending','waiting'].includes(o.status))
+        o.status = o.jml_naik > 0 ? 'boarded' : 'paid';
+      return [{ r_tambahan:tamb, r_total:total, r_dibayar:dibayar, r_sisa:sisa, r_status:o.status }];
+    },
 
     bayar_pakai_deposit: () => {
       const sd = saldoUntukLat(arg.p_kode, arg.p_hp_lain);
@@ -2024,7 +2070,7 @@ function rpcLatihan(nama, arg = {}){
         catatan:arg.p_catatan || null, waktu:kini, diverifikasi_jam:kini,
         oleh:'Anda (mode panduan)' });
       const r2 = ringkasLat(o);
-      if (r2.r_sisa === 0 && ['pending','waiting'].includes(o.status)) o.status = 'paid';
+      if (r2.r_sisa === 0 && ['pending','waiting'].includes(o.status)) o.status = o.jml_naik > 0 ? 'boarded' : 'paid';
       else if (r2.r_sisa > 0 && o.status === 'pending')                o.status = 'waiting';
       o.diubah = kini;
       kunciKomisiLatihan();
@@ -2923,6 +2969,34 @@ const hariIniLokal = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 };
+/* ---- Add-on per pesanan (18 Nov 2026) ----
+   Sebelum ini dashboard tidak pernah membaca pesanan_tambahan: totalnya ikut
+   terjumlah, rinciannya tidak terlihat di mana pun, jadi petugas dermaga
+   tidak tahu siapa yang memesan paddleboard atau drone.
+   Tabelnya kecil (satu baris per add-on per pesanan), jadi diambil utuh lalu
+   dipetakan per KODE pesanan. RLS yang menyaring: agen hanya melihat add-on
+   pesanannya, petugas boarding hanya pesanan lunas. */
+async function muatAddon(){
+  const { data, error } = await DB.from('pesanan_tambahan')
+    .select('jumlah,harga_beku,satuan_beku,pesanan(kode),tambahan(slug,nama)');
+  const peta = {};
+  if (error) return peta;          // gagal baca add-on tidak boleh mematikan tab
+  (data || []).forEach(r => {
+    const k = r.pesanan?.kode;
+    if (k) (peta[k] ||= []).push(r);
+  });
+  return peta;
+}
+const teksAddon = daftar => (daftar || []).map(r => {
+  const nm = r.tambahan?.nama || 'Add-on';
+  return r.satuan_beku === 'unit'  ? `${nm} × ${r.jumlah}`
+       : r.satuan_beku === 'orang' ? `${nm} (${r.jumlah} orang)` : nm;
+}).join(', ');
+const selAddon = kode => {
+  const d = (S.addonPeta || {})[kode];
+  return d && d.length ? `<div class="addon">+ ${esc(teksAddon(d))}</div>` : '';
+};
+
 /* Lencana HARI INI untuk tanggal keberangkatan (13 Nov 2026). Satu pintu,
    supaya semua daftar penumpang menandai hari ini dengan cara yang sama dan
    memakai jam lokal (WIB), bukan UTC. */
@@ -3144,6 +3218,7 @@ function batasBulanWib(periode){
 
 async function tabPesanan(){
   if (S.periode === undefined) S.periode = periodeKini();
+  S.addonPeta = await muatAddon();
   const bts = batasBulanWib(S.periode);
 
   /* Periode disaring DI SERVER, bukan sesudah 300 baris diambil. Kalau
@@ -3212,7 +3287,7 @@ async function tabPesanan(){
                 title="${esc(o.pemesan_alamat)}">${esc(o.pemesan_alamat)}</div>` : ''}</td>
             <td class="nw">${selWa(o.pemesan_hp, `Halo ${o.pemesan_nama}, ini dari The Tamperan Cruise soal pesanan ${o.kode}.`)}${
               selWa2(o.pemesan_hp2, o.pemesan_nama, o.kode)}</td>
-            <td class="nw">${esc(o.produk?.nama)}</td>
+            <td class="nw">${esc(o.produk?.nama)}${selAddon(o.kode)}</td>
             <td class="num nw">${o.pax}${o.anak?` <span class="pill p-warn">${o.anak} anak</span>`:''}</td>
             <td class="nw">${o.agen?`<span class="nama" style="max-width:130px" title="${esc(o.agen.nama)}">${esc(o.agen.nama)}</span>`
               :'<span class="pill p-mute">LANGSUNG</span>'}</td>
@@ -3352,6 +3427,13 @@ function aksiStatus(o){
          style="color:var(--muted)">Riwayat</a>`);
   }
 
+  /* ---- Add-on susulan (18 Nov 2026) ----
+     Untuk pembeli yang menambah paddleboard/drone sesudah memesan, termasuk
+     di hari H. Hanya Super Admin & Admin: mengubah add-on mengubah tagihan,
+     dan merekalah yang mencatat uangnya. */
+  if (bisaBayar() && hidup)
+    t.push(`<a class="aksi ghost" href="#" data-addon="${esc(o.kode)}">Add-on</a>`);
+
   /* ---- Kesepakatan uang muka ----
      Terpisah dari "Catat bayar", dan itu disengaja: yang satu mencatat uang yang
      SUDAH masuk, yang ini menetapkan berapa yang DISEPAKATI akan masuk di muka.
@@ -3471,6 +3553,11 @@ const METODE = [['transfer','Transfer bank'],['tunai','Tunai'],
 const LABEL_METODE = Object.fromEntries([...METODE, ['deposit','Saldo deposit']]);
 
 function pasangAksiUang(muatUlang){
+  $('isi').querySelectorAll('[data-addon]').forEach(t => t.onclick = async e => {
+    e.preventDefault();
+    await popAddon(t.dataset.addon, muatUlang);
+  });
+
   /* ---- Catat bayar / riwayat ---- */
   $('isi').querySelectorAll('[data-bayar]').forEach(t => t.onclick = async e => {
     e.preventDefault();
@@ -3716,6 +3803,105 @@ async function popDp(kode, total, dpSekarang, muatUlang){
 }
 
 /* ---- Pop-up: ringkasan + riwayat + formulir pencatatan ---- */
+/* ---- Pop-up Add-on: tambah, ubah jumlah, hapus (18 Nov 2026) ----
+   Tagihan dihitung ulang di database (ubah_tambahan). Komisi agen TIDAK ikut
+   berubah kalau pesanannya sudah pernah lunas: komisinya sudah dikunci
+   (keputusan Kak Mer, opsi A). Harga add-on yang sudah ada tetap memakai
+   harga waktu dipesan, walau harga katalognya sudah berubah. */
+async function popAddon(kode, muatUlang){
+  const [{ data: kat, error: e1 }, peta, { data: rs }, { data: pd }] = await Promise.all([
+    DB.from('tambahan').select('id,slug,nama,harga,satuan,maks,aktif,urutan').order('urutan'),
+    muatAddon(),
+    DB.rpc('ringkas_bayar', { p_kode: kode }),
+    DB.from('pesanan').select('pax,status,komisi_nominal').eq('kode', kode).maybeSingle(),
+  ]);
+  if (e1) return gagalPesan(e1);
+  const r = Array.isArray(rs) ? rs[0] : rs;
+  const ada = Object.fromEntries((peta[kode] || []).map(x => [x.tambahan?.slug, x]));
+  /* Yang ditampilkan: semua add-on aktif + add-on nonaktif yang sudah
+     terlanjur ada di pesanan ini (supaya tetap bisa dikurangi). */
+  const daftar = (kat || []).filter(t => t.aktif || ada[t.slug]);
+  if (!daftar.length) return pesan('Belum ada add-on yang aktif. Tambahkan dulu di Pengaturan.', 8000);
+  const pax = pd?.pax || 1;
+  const lunas = r && r.r_dibayar > 0 && r.r_sisa === 0;
+
+  const baris = t => {
+    const x = ada[t.slug];
+    const hrg = x ? x.harga_beku : t.harga;
+    const ket = t.satuan === 'unit' ? 'per unit' : t.satuan === 'orang' ? `per orang × ${pax}` : 'per pesanan';
+    const kendali = t.satuan === 'unit'
+      ? `<input data-ad="${esc(t.slug)}" inputmode="numeric" value="${x ? x.jumlah : 0}"
+           aria-label="Jumlah ${esc(t.nama)}" style="width:80px;text-align:right">`
+      : `<label style="display:flex;gap:6px;align-items:center;margin:0;font-weight:600">
+           <input type="checkbox" data-ad="${esc(t.slug)}" ${x ? 'checked' : ''}
+             style="width:auto;flex:none"> Pakai</label>`;
+    return `<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;
+                        padding:10px 0;border-bottom:1px dashed var(--line)">
+      <div><b>${esc(t.nama)}</b>${!t.aktif ? ' <span class="pill p-mute">NONAKTIF</span>' : ''}
+        <div class="hint" style="margin:2px 0 0">${rp(hrg)} ${ket}${
+          x && x.harga_beku !== t.harga ? ` (harga saat dipesan, katalog sekarang ${rp(t.harga)})` : ''}</div></div>
+      <div style="flex:none">${kendali}</div></div>`;
+  };
+
+  const { q, tutup } = bukaLapis(`
+    <h3>Add-on ${esc(kode)}</h3>
+    <div class="hint" style="margin-bottom:8px">Ubah lalu simpan. Total tagihan dihitung ulang
+      otomatis dan perubahannya tercatat atas nama Anda.</div>
+    <div>${daftar.map(baris).join('')}</div>
+    <div class="uang" style="margin-top:12px"><span>Add-on sekarang</span><b>${
+      rp((peta[kode] || []).reduce((a, x) => a + x.jumlah * x.harga_beku, 0))}</b></div>
+    <div class="uang"><span>Add-on sesudah diubah</span><b id="ad-baru">&ndash;</b></div>
+    ${lunas ? `<div class="note w" style="margin-top:12px"><b>Pesanan ini sudah lunas</b>
+      Kalau add-on ditambah, statusnya kembali <b>sebagian bayar</b> sampai kekurangannya
+      dicatat, dan selama itu pesanan tidak tampil di daftar Petugas Boarding. Sesudah
+      menyimpan, formulir Catat bayar langsung terbuka supaya kekurangannya bisa langsung
+      dicatat (tunai, transfer, atau saldo deposit).${pd && pd.komisi_nominal != null
+        ? ' Komisi agen tetap seperti semula, add-on susulan tidak menambah komisi.' : ''}</div>` : ''}
+    <div class="aksi-bar">
+      <button type="button" class="btn ghost tbl-tutup">Batal</button>
+      <button type="button" class="btn" id="ad-simpan">Simpan add-on</button>
+    </div>`);
+  q('.tbl-tutup').onclick = tutup;
+
+  const kumpul = () => daftar.map(t => {
+    const el = q(`[data-ad="${t.slug}"]`);
+    const jml = el.type === 'checkbox' ? (el.checked ? 1 : 0) : (angkaRp(el.value) ?? -1);
+    return { t, jml };
+  });
+  const hitung = () => {
+    let n = 0, salah = false;
+    kumpul().forEach(({ t, jml }) => {
+      if (jml < 0) { salah = true; return; }
+      if (!jml) return;
+      const hrg = ada[t.slug] ? ada[t.slug].harga_beku : t.harga;
+      n += hrg * (t.satuan === 'unit' ? jml : t.satuan === 'orang' ? pax : 1);
+    });
+    q('#ad-baru').textContent = salah ? 'angka tidak sah' : rp(n);
+  };
+  q('.kotak').querySelectorAll('[data-ad]').forEach(el => { el.oninput = hitung; el.onchange = hitung; });
+  hitung();
+
+  q('#ad-simpan').onclick = async () => {
+    const item = [];
+    for (const { t, jml } of kumpul()){
+      if (jml < 0) return pesan(`Jumlah ${esc(t.nama)} harus angka 0 atau lebih.`, 7000);
+      if (t.satuan === 'unit' && t.maks && jml > t.maks)
+        return pesan(`Jumlah ${esc(t.nama)} maksimal ${t.maks}.`, 7000);
+      if (jml > 0) item.push({ slug: t.slug, jumlah: jml });
+    }
+    const btn = q('#ad-simpan');
+    btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Menyimpan…';
+    const { data, error } = await DB.rpc('ubah_tambahan', { p_kode: kode, p_item: item });
+    if (error){ btn.disabled = false; btn.textContent = 'Simpan add-on'; return gagalPesan(error); }
+    const h = Array.isArray(data) ? data[0] : data;
+    tutup();
+    pesan(`Add-on <b>${esc(kode)}</b> tersimpan. Total sekarang ${rp(h.r_total)}`
+      + (h.r_sisa > 0 ? `, kurang bayar <b>${rp(h.r_sisa)}</b>.` : '.'), 10000);
+    await muatUlang();
+    if (h.r_sisa > 0 && h.r_dibayar > 0) await popBayar(kode, muatUlang);
+  };
+}
+
 async function popBayar(kode, muatUlang){
   /* dp_target diambil terpisah, BUKAN dengan menambah kolom ke ringkas_bayar():
      mengubah RETURNS TABLE sebuah fungsi uang berarti DROP lalu CREATE, dan
@@ -4835,6 +5021,7 @@ async function tabFollowUp(){
 async function tabManifest(){
   /* Belum memilih tanggal -> tampilkan ringkasannya dulu. */
   if (!S.mfTgl) return tabBerangkat();
+  S.addonPeta = await muatAddon();
 
   const [{data:ord, error:e1}, {data:atur}] = await Promise.all([
     DB.from('pesanan').select('kode,tipe,pax,anak,jml_naik,status,tanggal_berangkat,dibuat,'
@@ -4903,7 +5090,7 @@ async function tabManifest(){
                 esc(o.biro_nama)}${o.biro_pic ? ' · PIC ' + esc(o.biro_pic) : ''}</div>` : ''}</td>
             <td class="nw">${selWa(o.pemesan_hp,
               `Halo ${o.pemesan_nama}, ini dari The Tamperan Cruise soal pesanan ${o.kode}.`)}</td>
-            <td class="nw">${esc(o.produk?.nama)}</td>
+            <td class="nw">${esc(o.produk?.nama)}${selAddon(o.kode)}</td>
             <td class="num">${o.pax}</td>
             <td class="num">${o.anak
               ? `<span class="pill p-warn">${o.anak}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
@@ -5059,6 +5246,7 @@ const labelStatus = st => (STATUS[st] || [st])[0];
    Jenis kolom: teks | hp | rp | angka | persen | tgl | jam | status
    --------------------------------------------------------------------- */
 async function siapkanIsiEkspor(periode, pilih, lapor){
+  const addonPeta = await muatAddon();
   const bts = batasBulanWib(periode);
   const tglMulai = periode ? `${periode}-01` : null;
   const tglSampai = periode ? (() => {
@@ -5146,6 +5334,7 @@ async function siapkanIsiEkspor(periode, pilih, lapor){
       { h:'Orang', t:'angka', w:8, total:1 }, { h:'Anak', t:'angka', w:7, total:1 },
       { h:'Harga satuan', t:'rp', w:14 }, { h:'Subtotal', t:'rp', w:15, total:1 },
       { h:'Diskon', t:'rp', w:13, total:1 }, { h:'Add-on', t:'rp', w:13, total:1 },
+      { h:'Rincian add-on', t:'teks', w:30 },
       { h:'Kode unik', t:'rp', w:11, total:1 }, { h:'Total', t:'rp', w:15, total:1 }, { h:'Sudah dibayar', t:'rp', w:15, total:1 },
       { h:'Sisa tagihan', t:'rp', w:15, total:1 }, { h:'Kode voucher', t:'teks', w:13 },
       { h:'Status', t:'status', w:15 }, { h:'Kapal', t:'teks', w:10 },
@@ -5157,7 +5346,7 @@ async function siapkanIsiEkspor(periode, pilih, lapor){
       return [o.kode, o.dibuat, o.tanggal_berangkat, o.tipe === 'biro' ? 'Biro' : 'Perorangan',
         o.pemesan_nama, o.pemesan_hp, o.biro_nama, o.agen?.nama, o.produk?.nama,
         o.pax, o.anak, o.harga_satuan_beku, o.subtotal, o.diskon_nominal, o.tambahan_nominal,
-        o.kode_unik, o.total, b.r_dibayar, b.r_sisa, o.kode_voucher_beku, labelStatus(o.status), o.kapal?.nama,
+        teksAddon(addonPeta[o.kode]) || null, o.kode_unik, o.total, b.r_dibayar, b.r_sisa, o.kode_voucher_beku, labelStatus(o.status), o.kapal?.nama,
         o.jml_naik, o.komisi_persen, o.komisi_nominal, o.komisi_tiket_kumulatif];
     }),
   });
@@ -5209,13 +5398,15 @@ async function siapkanIsiEkspor(periode, pilih, lapor){
         { h:'Berangkat', t:'tgl', w:13 }, { h:'Kapal', t:'teks', w:10 }, { h:'Kode', t:'teks', w:13 },
         { h:'Dipesan', t:'jam', w:17 }, { h:'Pemesan', t:'teks', w:24 }, { h:'WhatsApp', t:'hp', w:15 },
         { h:'Biro', t:'teks', w:20 }, { h:'Produk', t:'teks', w:16 },
+        { h:'Add-on', t:'teks', w:30 },
         { h:'Orang', t:'angka', w:8, total:1 }, { h:'Anak', t:'angka', w:7, total:1 },
         { h:'Sudah naik', t:'angka', w:10, total:1 },
         ...(alamat ? [{ h:'Alamat sesuai KTP', t:'teks', w:44 }] : []),
         { h:'Status', t:'status', w:15 },
       ],
       baris: berangkat.map(o => [o.tanggal_berangkat, o.kapal?.nama || 'belum', o.kode, o.dibuat,
-        o.pemesan_nama, o.pemesan_hp, o.biro_nama, o.produk?.nama, o.pax, o.anak, o.jml_naik,
+        o.pemesan_nama, o.pemesan_hp, o.biro_nama, o.produk?.nama, teksAddon(addonPeta[o.kode]) || null,
+        o.pax, o.anak, o.jml_naik,
         ...(alamat ? [o.pemesan_alamat] : []), labelStatus(o.status)]),
     });
   }
@@ -6316,6 +6507,7 @@ async function tabBerangkat(){
 
 /* ============ PEMBAGIAN KAPAL ============ */
 async function tabKapal(){
+  S.addonPeta = await muatAddon();
   const [{data:kapalSemua, error:e1}, {data:pes, error:e2}] = await Promise.all([
     /* SEMUA kapal, termasuk nonaktif: kalau disaring aktif=true, kapal yang
        pernah dinonaktifkan tidak akan pernah bisa diaktifkan lagi dari layar. */
@@ -6430,7 +6622,7 @@ async function tabKapal(){
               o.dibuat ? tgl(o.dibuat) : '—'}</td>
             <td class="nw"><span class="nama" title="${esc(o.pemesan_nama)}">${esc(o.pemesan_nama)}</span>${
               o.tipe==='biro'?' <span class="pill p-sea">BIRO</span>':''}</td>
-            <td class="nw">${esc(o.produk?.nama)}</td>
+            <td class="nw">${esc(o.produk?.nama)}${selAddon(o.kode)}</td>
             <td class="num nw">${o.pax}${o.anak?` <span class="pill p-warn">${o.anak} anak</span>`:''}</td>
             <td class="nw"><span class="pill ${st[1]}">${st[0]}</span></td>
             <td class="nw"><select data-kapal="${o.id}" data-lama="${o.kapal_id || ''}"
@@ -7932,6 +8124,7 @@ async function tabAtur(){
 /* ============ AGEN: KOMISI & PELANGGAN SAYA ============ */
 async function tabKomisi(){
   if (S.periode === undefined) S.periode = periodeKini();
+  S.addonPeta = await muatAddon();
   const per = S.periode || null;
 
   const [{data:lb}, {data:semuaPesanan, error}, {data:prd}, {data:ta}] = await Promise.all([
@@ -8035,7 +8228,7 @@ async function tabKomisi(){
                                   : '<span style="color:var(--muted)">—</span>'}</td>
             <td class="nw"><span class="nama" title="${esc(o.pemesan_nama)}">${esc(o.pemesan_nama)}</span></td>
             <td class="nw">${selWa(o.pemesan_hp, `Halo ${o.pemesan_nama}, ini dari The Tamperan Cruise soal pesanan ${o.kode}.`)}</td>
-            <td class="nw">${esc(o.produk?.nama)}</td><td class="num">${o.pax}</td>
+            <td class="nw">${esc(o.produk?.nama)}${selAddon(o.kode)}</td><td class="num">${o.pax}</td>
             <td class="num nw">${rp(o.total)}</td>
             <td class="num nw">${o.komisi_nominal == null
               ? `<span style="color:var(--muted)">&mdash;</span>`
@@ -8077,6 +8270,7 @@ async function tabKomisi(){
    dengan angka yang jadi dasarnya.
    ==================================================================== */
 async function tabBoarding(){
+  S.addonPeta = await muatAddon();
   const { data, error } = await DB.from('pesanan')
     .select('kode,pax,anak,tipe,status,tanggal_berangkat,dibuat,pemesan_nama,biro_nama,'
           + 'jml_naik,deposit_jam,produk(nama),kapal(nama)')
@@ -8127,7 +8321,7 @@ async function tabBoarding(){
               o.tipe==='biro'?' <span class="pill p-sea">BIRO</span>':''}${
               o.biro_nama ? `<div class="hint nama" style="max-width:190px"
                 title="${esc(o.biro_nama)}">${esc(o.biro_nama)}</div>` : ''}</td>
-            <td class="nw">${esc(o.produk?.nama)}</td>
+            <td class="nw">${esc(o.produk?.nama)}${selAddon(o.kode)}</td>
             <td class="num">${o.pax}${o.anak?`<div class="hint" style="color:var(--warn)">${o.anak} anak</div>`:''}</td>
             <td class="nw" data-sel-naik="${esc(o.kode)}"
                 data-urut="${o.jml_naik||0}">${selNaik(o, bisaCatat)}</td>

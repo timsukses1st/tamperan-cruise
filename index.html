@@ -50,7 +50,7 @@ h2{font-size:22px;letter-spacing:-.4px;margin:34px 0 4px}
 .grid{display:grid;gap:14px}
 .g2{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
 /* Tiga kolom jumlah penumpang (dewasa / anak / balita), 18 Nov 2026. */
-.g3-pnp{grid-template-columns:repeat(3,minmax(0,1fr))}
+.g3-pnp{grid-template-columns:repeat(3,minmax(0,1fr));align-items:end}
 @media (max-width:560px){ .g3-pnp{grid-template-columns:1fr 1fr} .g3-pnp > :last-child{grid-column:1/-1} }
 
 /* ---------- produk ---------- */
@@ -708,6 +708,11 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
   box-shadow:0 8px 26px rgba(0,0,0,.22)}
 #form-area label,#hasil label{color:#e8f2f8}
 #form-area .hint,#hasil .hint{color:var(--band-redup)}
+/* 18 Nov 2026: keterangan kecil di dalam label ("(12 tahun ke atas)", "(kalau
+   ada)", "(boleh kosong)") memakai --muted yang dibuat untuk latar terang, jadi
+   nyaris tak terlihat di kartu gelap. Disamakan dengan warna .hint. */
+#form-area label span[style*="var(--muted)"],#hasil label span[style*="var(--muted)"]{
+  color:var(--band-redup)!important}
 /* INI yang sengaja tidak ikut gelap. Lihat alasannya di kepala blok ini. */
 #form-area input,#form-area select,#form-area textarea,
 #hasil input,#hasil select,#hasil textarea{background:#fff;color:var(--ink);
@@ -1190,7 +1195,7 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
           </div>
           <div class="fld" id="fld-balita">
             <label for="f-balita" style="font-weight:600">Balita <span style="font-weight:400;color:var(--muted)">(di bawah 5 tahun)</span>
-              <span class="pill p-ok" style="font-size:10px">GRATIS</span></label>
+              <span class="pill p-ok" style="font-size:10px;line-height:1.3;vertical-align:1px">GRATIS</span></label>
             <input id="f-balita" type="number" min="0" max="200" value="0" inputmode="numeric">
           </div>
         </div>
@@ -1373,7 +1378,7 @@ footer{border-top-color:rgba(255,255,255,.1);color:var(--band-redup)}
          dinaikkan TERPISAH ke Vercel, jadi dua-duanya perlu nomor sendiri:
          kalau cuma satu yang punya, salah satu bisa tertinggal tanpa ketahuan.
          Perbarui baris ini tiap kali berkas ini dikirim ulang. -->
-    <span style="opacity:.55;font-size:11.5px">versi 2026-11-18d</span>
+    <span style="opacity:.55;font-size:11.5px">versi 2026-11-18e</span>
   </footer>
 </div>
 

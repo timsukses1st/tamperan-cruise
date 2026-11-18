@@ -818,6 +818,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-18f', 'Foto paket diunggah dari dashboard; wajib saat menambah produk baru'],
   ['2026-11-18e', 'Voucher bisa diberi masa berlaku untuk promo edisi tertentu'],
   ['2026-11-18d', 'Rincian harga di pop-up Add-on dibuat seperti nota: yang berubah, total lama ke baru, sudah dibayar, kurang bayar'],
   ['2026-11-18c', 'Tab Pesanan: tombol tindakan dipisah dari status ke kolom Tindakan sendiri'],
@@ -6011,6 +6012,28 @@ function pasangUndang(){
    supaya tidak ada angka basi yang menyesatkan pembaca tabel. */
 const SLUG_POLA = /^[a-z0-9-]{2,40}$/;    /* sama persis dengan produk_slug_check */
 
+/* ---- Foto paket (18 Nov 2026) ----
+   Dulu foto paket hanya bisa dipasang developer dengan menaruh berkas
+   /img/paket-<slug>.jpg di repo, jadi produk baru dari dashboard selalu tampil
+   dengan gambar cadangan. Sekarang diunggah dari formulir produk ke bucket
+   'galeri' folder 'paket/' dan jalurnya disimpan di produk.foto_path.
+   Urutan sumber, SAMA dengan halaman publik: foto unggahan -> berkas lama di
+   /img -> gambar cadangan. */
+function urlFotoProduk(p){
+  if (p.foto_path){
+    const { data } = DB.storage.from('galeri').getPublicUrl(p.foto_path);
+    if (data && data.publicUrl) return data.publicUrl;
+  }
+  return `/img/paket-${String(p.slug || '').replace(/[^a-z0-9-]/gi, '')}.jpg`;
+}
+function selFotoProduk(p){
+  return `<span style="position:relative;display:inline-block;width:64px;height:40px">
+    <img src="${esc(urlFotoProduk(p))}" alt="" loading="lazy"
+      style="width:64px;height:40px;object-fit:cover;border-radius:6px;border:1px solid var(--line)"
+      onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'pill p-warn',textContent:'BELUM ADA'}))">
+  </span>`;
+}
+
 function slugOtomatis(nama){
   return String(nama||'').toLowerCase()
     .replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40);
@@ -6068,6 +6091,20 @@ function pasangKelolaProduk(produkSemua){
             warga Pacitan. Browser tidak bisa mengaku-ngaku warga Pacitan.</div></div>
       </div>
       <div class="grid g2">
+        <div class="fld" style="grid-column:1/-1"><label for="pr-foto">Foto paket ${p
+            ? '<span style="font-weight:400;color:var(--muted)">(kosongkan kalau tidak diganti)</span>'
+            : '<span style="color:var(--danger)">*wajib</span>'}</label>
+          <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+            <div id="pr-foto-pratinjau" style="width:160px;aspect-ratio:16/10;border-radius:10px;
+              border:1px solid var(--line);background:#f1f5f9 center/cover no-repeat;flex:none;
+              display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px">${
+              p ? '' : 'belum ada foto'}</div>
+            <div style="flex:1;min-width:220px">
+              <input id="pr-foto" type="file" accept="image/jpeg,image/png,image/webp">
+              <div class="hint">Tampil di kartu paket halaman pemesanan. Foto mendatar (lanskap)
+                paling bagus. Foto dari HP boleh langsung dipilih, ukurannya dikecilkan
+                otomatis sebelum diunggah.</div></div>
+          </div></div>
         <div class="fld"><label for="pr-desk">Deskripsi <span style="font-weight:400;color:var(--muted)">(boleh dikosongkan)</span></label>
           <input id="pr-desk" maxlength="200" autocomplete="off"
                  value="${esc(p?.deskripsi ?? '')}"></div>
@@ -6093,6 +6130,16 @@ function pasangKelolaProduk(produkSemua){
       const t = $('pr-model').value === 'tingkat';
       $('harga-tingkat').style.display = t ? 'grid' : 'none';
       $('harga-flat').style.display    = t ? 'none' : 'grid';
+    };
+    /* Pratinjau foto: foto yang sedang dipakai (kalau mengubah), lalu foto
+       yang baru dipilih begitu berkasnya dipilih. */
+    const prv = $('pr-foto-pratinjau');
+    if (p) prv.style.backgroundImage = `url('${urlFotoProduk(p)}'),url('/img/ph-umum.svg')`;
+    $('pr-foto').onchange = () => {
+      const f = $('pr-foto').files[0];
+      if (!f) return;
+      prv.textContent = '';
+      prv.style.backgroundImage = `url('${URL.createObjectURL(f)}')`;
     };
     /* Slug terisi otomatis selama belum disentuh tangan. */
     let slugManual = !!p;
@@ -6153,9 +6200,33 @@ async function simpanProduk(p, produkSemua){
       return pesan('Model harga sama wajib mengisi harganya, berupa angka bulat.', 9000);
   }
 
+  const berkas = $('pr-foto').files[0];
+  if (!p && !berkas)
+    return pesan('<b>Foto paket wajib diisi</b> untuk produk baru. Foto ini yang tampil '
+      + 'di kartu paket halaman pemesanan.', 9000);
+
   const b = $('pr-simpan'); b.disabled = true; b.textContent = 'Menyimpan…';
   const pulih = () => { b.disabled = false;
     b.textContent = p ? 'Simpan perubahan' : 'Tambah produk'; };
+
+  /* Foto diunggah DULU, baru baris produknya disimpan. Kalau penyimpanan
+     barisnya gagal, berkas yang terlanjur naik dihapus lagi supaya tidak
+     memakan kuota tanpa pernah dipakai. */
+  let jalurBaru = null;
+  if (berkas){
+    try {
+      b.innerHTML = '<span class="spin"></span> Mengecilkan foto…';
+      const { blob } = await kecilkanFoto(berkas);
+      b.innerHTML = '<span class="spin"></span> Mengunggah foto…';
+      jalurBaru = `paket/${slug}-${Date.now()}.jpg`;
+      const { error: eUp } = await DB.storage.from('galeri')
+        .upload(jalurBaru, blob, { contentType: 'image/jpeg', upsert: false });
+      if (eUp) throw eUp;
+    } catch (e){
+      pulih();
+      return pesan('<b>Foto gagal diunggah:</b> ' + esc((e && e.message) || 'tidak diketahui'), 10000);
+    }
+  }
 
   /* Kolom harga yang tidak dipakai dikosongkan, bukan dibiarkan berisi angka lama. */
   const isi = {
@@ -6166,6 +6237,7 @@ async function simpanProduk(p, produkSemua){
     harga_umum:  tingkat ? parseInt(umum,10)  : null,
     harga_flat:  tingkat ? null : parseInt(flat,10),
     dapat_voucher: $('pr-vou').checked,
+    ...(jalurBaru ? { foto_path: jalurBaru } : {}),
     urutan: urut === ''
       ? (p ? p.urutan : Math.max(0, ...produkSemua.map(x => x.urutan || 0)) + 1)
       : parseInt(urut,10),
@@ -6174,7 +6246,12 @@ async function simpanProduk(p, produkSemua){
   const { error } = p
     ? await DB.from('produk').update(isi).eq('id', p.id)
     : await DB.from('produk').insert({ ...isi, aktif: true });
-  if (error){ pulih(); return gagalPesan(error); }
+  if (error){
+    if (jalurBaru) await DB.storage.from('galeri').remove([jalurBaru]);
+    pulih(); return gagalPesan(error);
+  }
+  /* Foto lama yang sudah diganti dibuang dari penyimpanan. */
+  if (jalurBaru && p && p.foto_path) await DB.storage.from('galeri').remove([p.foto_path]);
 
   pesan(p
     ? `<b>${esc(nama)}</b> diperbarui. Harga baru langsung berlaku di halaman pemesanan; `
@@ -7787,7 +7864,7 @@ async function tabAtur(){
     /* SEMUA produk termasuk nonaktif: kalau disaring aktif=true, produk yang
        pernah dinonaktifkan tidak akan pernah bisa dihidupkan lagi dari layar. */
     DB.from('produk').select('id,slug,nama,deskripsi,bertingkat,harga_lokal,harga_umum,'
-      + 'harga_flat,dapat_voucher,aktif,urutan').order('urutan'),
+      + 'harga_flat,dapat_voucher,aktif,urutan,foto_path').order('urutan'),
   ]);
   if (error) return gagal(error);
   if (ePro)  return gagal(ePro);
@@ -8107,11 +8184,12 @@ async function tabAtur(){
              tanda petik-miring (backtick) tidak boleh dipakai di sini —
              ia menutup string lebih awal dan seluruh berkas gagal diurai.
              Sudah kejadian sekali waktu komentar ini ditulis. -->
-        <thead><tr><th class="nw">Nama</th><th class="nw">Kode tetap</th><th class="nw">Model harga</th>
+        <thead><tr><th class="nw">Foto</th><th class="nw">Nama</th><th class="nw">Kode tetap</th><th class="nw">Model harga</th>
           <th class="num">Lokal</th><th class="num">Umum</th><th class="num">Flat</th>
           <th class="nw">Kode warga Pacitan</th><th class="nw">Bonus voucher</th>
           <th class="nw">Status</th><th></th></tr></thead>
         <tbody>${(produk||[]).map(p => `<tr>
+          <td class="nw">${selFotoProduk(p)}</td>
           <td class="nw"><b class="nama" title="${esc(p.nama)}">${esc(p.nama)}</b></td>
           <td class="mono nw" style="font-size:12px;color:var(--muted)">${esc(p.slug)}</td>
           <td class="nw">${p.bertingkat
@@ -8158,10 +8236,10 @@ async function tabAtur(){
      penyaring Status cuma akan menyaring kolom yang keliru, dan kolom aksi
      jadi bisa diurutkan. Diam, dan baru ketahuan waktu dipakai. */
   lengkapiTabel('#isi table[data-papan="produk"]', {
-    id: 'produk', takUrut: [9], petunjuk: 'Cari nama produk atau kodenya…',
+    id: 'produk', takUrut: [0, 10], petunjuk: 'Cari nama produk atau kodenya…',
     saring: [
-      { kolom: 2, semua: 'Semua model harga', pilihan: ['BERTINGKAT','HARGA SAMA'] },
-      { kolom: 8, semua: 'Semua status',      pilihan: ['DIJUAL','TIDAK DIJUAL'] },
+      { kolom: 3, semua: 'Semua model harga', pilihan: ['BERTINGKAT','HARGA SAMA'] },
+      { kolom: 9, semua: 'Semua status',      pilihan: ['DIJUAL','TIDAK DIJUAL'] },
     ]
   });
   if (!ro) pasangKelolaProduk(produk || []);

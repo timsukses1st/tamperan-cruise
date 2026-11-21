@@ -818,6 +818,8 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-21b', 'Produk bisa ditandai tidak menerima voucher potongan (paket yang sudah berharga promo)'],
+  ['2026-11-21a', 'Voucher punya jenis: harga warga Pacitan, potongan persen, atau potongan nominal, dengan pilihan paket dan kuota'],
   ['2026-11-18h', 'Balita di bawah 5 tahun gratis: tampil di daftar penumpang, formulir pesanan biro, dan ekspor'],
   ['2026-11-18g', 'Penanda belum ada foto tidak lagi keluar kolom; produk yang belum pernah dipesan bisa dihapus permanen'],
   ['2026-11-18f', 'Foto paket diunggah dari dashboard; wajib saat menambah produk baru'],
@@ -1459,7 +1461,10 @@ function dataLatihan(){
       { id:'v2', kode:'WARGAPCT',    keterangan:'Kode pendek untuk lapangan',aktif:true,  dibuat:JAM(150) },
       { id:'v3', kode:'PROMOLAMA',   keterangan:'Kode lama, tidak berlaku',  aktif:false, dibuat:JAM(900) },
       { id:'v4', kode:'LAT-PROMO-EDISI', keterangan:'Contoh promo edisi terbatas', aktif:true,
-        dibuat:JAM(60), berlaku_mulai:HARI(-3), berlaku_sampai:HARI(10) },
+        dibuat:JAM(60), berlaku_mulai:HARI(-3), berlaku_sampai:HARI(10),
+        jenis:'persen', nilai:10, maks_potongan:50000, produk_slugs:['1-day-journey','2-day-journey'], kuota:50 },
+      { id:'v6', kode:'LAT-HEMAT25', keterangan:'Contoh potongan nominal per orang', aktif:true,
+        dibuat:JAM(30), jenis:'nominal', nilai:25000, per:'orang' },
       { id:'v5', kode:'LAT-PROMO-LALU',  keterangan:'Contoh promo yang sudah lewat', aktif:true,
         dibuat:JAM(700), berlaku_mulai:HARI(-40), berlaku_sampai:HARI(-10) },
     ],
@@ -1491,7 +1496,7 @@ function dataLatihan(){
         harga_lokal:100000, harga_umum:150000, harga_flat:null,
         dapat_voucher:false, aktif:true, urutan:1, dibuat:JAM(2000),
         deskripsi:'Pelabuhan Tamperan ke Teluk Gelon.' },
-      { id:'p2', slug:'cruise-promo', nama:'Cruise PROMO', bertingkat:false,
+      { id:'p2', slug:'cruise-promo', nama:'Cruise PROMO', bertingkat:false, terima_voucher:false,
         harga_lokal:null, harga_umum:null, harga_flat:150000,
         dapat_voucher:true, aktif:true, urutan:2, dibuat:JAM(1900),
         deskripsi:'Harga sama untuk semua, dapat voucher.' },
@@ -3262,7 +3267,7 @@ async function tabPesanan(){
      begitu pesanan menumpuk, bulan-bulan lama hilang sama sekali dari daftar
      dan tidak ada tanda apa pun bahwa ada yang terpotong. */
   let q = DB.from('pesanan')
-    .select('kode,tipe,pax,anak,balita,total,status,dibuat,tanggal_berangkat,kode_voucher_beku,'
+    .select('kode,tipe,pax,anak,balita,total,status,dibuat,tanggal_berangkat,kode_voucher_beku,voucher_potongan,'
            + 'pemesan_nama,pemesan_hp,pemesan_hp2,pemesan_alamat,biro_id,biro_nama,'
            + 'deposit_jam,deposit_sebab,harga_satuan_beku,dp_target,'
            /* Komisi DIKUNCI di baris pesanan sejak 11 Nov 2026. Dibaca, tidak
@@ -3332,7 +3337,8 @@ async function tabPesanan(){
                  "LUNAS" dan "Catat bayar" bertumpuk dan susah dibaca mana yang
                  sudah bayar. Sekarang status berdiri sendiri, tombol di sini. */''}
             <td><div class="tindakan">${aksiStatus(o) || '<span style="color:var(--muted)">&mdash;</span>'}</div></td>
-            <td class="num nw" data-urut="${o.total}">${rp(o.total)}${o.kode_unik
+            <td class="num nw" data-urut="${o.total}">${rp(o.total)}${o.voucher_potongan
+              ? `<div class="hint" style="color:var(--ok)">voucher ${esc(o.kode_voucher_beku || '')} &minus;${rp(o.voucher_potongan)}</div>` : ''}${o.kode_unik
               ? `<div class="hint" title="Kode unik transfer: 3 angka terakhir total">kode unik ${o.kode_unik}</div>` : ''}${selBayar(o, bayarPeta[o.kode])}</td>${
             `<td class="num nw" data-urut="${o.komisi_nominal||0}">${
               o.komisi_nominal == null
@@ -5363,7 +5369,7 @@ async function siapkanIsiEkspor(periode, pilih, lapor){
   lapor('Mengambil pesanan…');
   const KOLOM_PESANAN = 'id,kode,tipe,pax,anak,balita,status,dibuat,tanggal_berangkat,'
     + 'pemesan_nama,pemesan_hp,pemesan_alamat,biro_nama,harga_satuan_beku,subtotal,'
-    + 'diskon_nominal,tambahan_nominal,kode_unik,total,kode_voucher_beku,jml_naik,'
+    + 'diskon_nominal,voucher_potongan,tambahan_nominal,kode_unik,total,kode_voucher_beku,jml_naik,'
     + 'komisi_persen,komisi_nominal,komisi_tiket_kumulatif,'
     + 'produk(nama),agen(nama),kapal(nama)';
   const pesanan = await ambilSemuaBaris(() => {
@@ -5431,7 +5437,7 @@ async function siapkanIsiEkspor(periode, pilih, lapor){
 
   if (pilih.pesanan) isi.sheet.push({
     nama: 'Pesanan', judul: 'Daftar Pesanan',
-    ket: 'Semua pesanan yang dibuat di periode ini, semua status. Dasar tanggal: tanggal pesanan dibuat. Subtotal = Harga satuan x (Orang - Balita gratis). Total = Subtotal - Diskon + Add-on + Kode unik; komisi dihitung tanpa kode unik.',
+    ket: 'Semua pesanan yang dibuat di periode ini, semua status. Dasar tanggal: tanggal pesanan dibuat. Subtotal = Harga satuan x (Orang - Balita gratis). Total = Subtotal - Diskon - Potongan voucher + Add-on + Kode unik; komisi dihitung tanpa kode unik.',
     beku: 1,
     kolom: [
       { h:'Kode', t:'teks', w:13 }, { h:'Dibuat', t:'jam', w:17 }, { h:'Berangkat', t:'tgl', w:13 },
@@ -5440,7 +5446,8 @@ async function siapkanIsiEkspor(periode, pilih, lapor){
       { h:'Orang', t:'angka', w:8, total:1 }, { h:'Anak', t:'angka', w:7, total:1 },
       { h:'Balita gratis', t:'angka', w:9, total:1 },
       { h:'Harga satuan', t:'rp', w:14 }, { h:'Subtotal', t:'rp', w:15, total:1 },
-      { h:'Diskon', t:'rp', w:13, total:1 }, { h:'Add-on', t:'rp', w:13, total:1 },
+      { h:'Diskon', t:'rp', w:13, total:1 }, { h:'Potongan voucher', t:'rp', w:14, total:1 },
+      { h:'Add-on', t:'rp', w:13, total:1 },
       { h:'Rincian add-on', t:'teks', w:30 },
       { h:'Kode unik', t:'rp', w:11, total:1 }, { h:'Total', t:'rp', w:15, total:1 }, { h:'Sudah dibayar', t:'rp', w:15, total:1 },
       { h:'Sisa tagihan', t:'rp', w:15, total:1 }, { h:'Kode voucher', t:'teks', w:13 },
@@ -5452,7 +5459,7 @@ async function siapkanIsiEkspor(periode, pilih, lapor){
       const b = bayarPer[o.kode] || {};
       return [o.kode, o.dibuat, o.tanggal_berangkat, o.tipe === 'biro' ? 'Biro' : 'Perorangan',
         o.pemesan_nama, o.pemesan_hp, o.biro_nama, o.agen?.nama, o.produk?.nama,
-        o.pax, o.anak, o.balita || 0, o.harga_satuan_beku, o.subtotal, o.diskon_nominal, o.tambahan_nominal,
+        o.pax, o.anak, o.balita || 0, o.harga_satuan_beku, o.subtotal, o.diskon_nominal, o.voucher_potongan || 0, o.tambahan_nominal,
         teksAddon(addonPeta[o.kode]) || null, o.kode_unik, o.total, b.r_dibayar, b.r_sisa, o.kode_voucher_beku, labelStatus(o.status), o.kapal?.nama,
         o.jml_naik, o.komisi_persen, o.komisi_nominal, o.komisi_tiket_kumulatif];
     }),
@@ -6150,6 +6157,15 @@ function pasangKelolaProduk(produkSemua){
         <div class="fld"><label for="pr-desk">Deskripsi <span style="font-weight:400;color:var(--muted)">(boleh dikosongkan)</span></label>
           <input id="pr-desk" maxlength="200" autocomplete="off"
                  value="${esc(p?.deskripsi ?? '')}"></div>
+        <div class="fld"><label>Voucher potongan</label>
+          <label style="display:flex;gap:9px;align-items:flex-start;font-weight:400;cursor:pointer">
+            <input type="checkbox" id="pr-tv" style="width:auto;margin-top:3px"
+                   ${p ? (p.terima_voucher === false ? '' : 'checked') : 'checked'}>
+            <span style="font-size:13.5px">Paket ini <b>bisa dipotong</b> voucher persen/nominal<br>
+              <span style="color:var(--muted)">Hilangkan centangnya untuk paket yang sudah
+              berharga promo (mis. Cruise PROMO), supaya tidak dobel potongan. Berlaku untuk
+              semua voucher, termasuk yang diterbitkan nanti.</span>
+            </span></label></div>
         <div class="fld"><label>Voucher makan</label>
           <label style="display:flex;gap:9px;align-items:flex-start;font-weight:400;cursor:pointer">
             <input type="checkbox" id="pr-vou" style="width:auto;margin-top:3px"
@@ -6298,6 +6314,7 @@ async function simpanProduk(p, produkSemua){
     harga_umum:  tingkat ? parseInt(umum,10)  : null,
     harga_flat:  tingkat ? null : parseInt(flat,10),
     dapat_voucher: $('pr-vou').checked,
+    terima_voucher: $('pr-tv').checked,
     ...(jalurBaru ? { foto_path: jalurBaru } : {}),
     urutan: urut === ''
       ? (p ? p.urutan : Math.max(0, ...produkSemua.map(x => x.urutan || 0)) + 1)
@@ -6891,6 +6908,112 @@ function masaVoucher(v){
     return `${tglPendekTh(v.berlaku_mulai)} &ndash; ${tglPendekTh(v.berlaku_sampai)}`;
   return v.berlaku_mulai ? `Mulai ${tglPendekTh(v.berlaku_mulai)}` : `Sampai ${tglPendekTh(v.berlaku_sampai)}`;
 }
+/* ---- Jenis voucher (21 Nov 2026) ----
+   pacitan : ganti ke harga warga Pacitan (paket bertingkat)
+   persen  : potong nilai% dari harga tiket sesudah diskon kode agen, boleh ada maks_potongan
+   nominal : potong Rp nilai per orang berbayar / per pesanan
+   Hitungan resminya di buat_pesanan(); formulir ini hanya mengisi aturannya. */
+function isiVoucherDash(v, produk){
+  const nmPaket = v.produk_slugs && v.produk_slugs.length
+    ? v.produk_slugs.map(sl => (produk.find(p => p.slug === sl) || { nama: sl }).nama).join(', ')
+    : 'semua paket' + (produk.some(p => p.terima_voucher === false) ? ' kecuali harga promo' : '');
+  if (!v.jenis || v.jenis === 'pacitan') return 'Harga warga Pacitan <span style="color:var(--muted)">(Cruise Daily)</span>';
+  const isi = v.jenis === 'persen'
+    ? `Potongan <b>${Number(v.nilai)}%</b>${v.maks_potongan ? ` maks ${rp(v.maks_potongan)}` : ''}`
+    : `Potongan <b>${rp(Number(v.nilai))}</b> ${v.per === 'orang' ? 'per orang' : 'per pesanan'}`;
+  return `${isi} <span style="color:var(--muted)">· ${esc(nmPaket)}</span>`;
+}
+function formIsiVoucher(px, v, produk){
+  const j = v?.jenis || 'pacitan', pilih = v?.produk_slugs || [];
+  return `
+    <div class="grid g2">
+      <div class="fld"><label for="${px}-jenis">Jenis voucher</label>
+        <select id="${px}-jenis">
+          <option value="pacitan" ${j==='pacitan'?'selected':''}>Harga warga Pacitan</option>
+          <option value="persen"  ${j==='persen'?'selected':''}>Potongan persen (%)</option>
+          <option value="nominal" ${j==='nominal'?'selected':''}>Potongan nominal (Rp)</option>
+        </select>
+        <div class="hint" id="${px}-jenis-ket"></div></div>
+      <div class="fld ${px}-potong"><label for="${px}-nilai" id="${px}-nilai-lbl">Besar potongan</label>
+        <input id="${px}-nilai" inputmode="numeric" value="${v && v.nilai != null ? Number(v.nilai) : ''}" placeholder="mis. 10">
+        <div class="hint" id="${px}-nilai-ket"></div></div>
+      <div class="fld ${px}-nominal"><label for="${px}-per">Dihitung</label>
+        <select id="${px}-per">
+          <option value="orang"   ${v?.per==='orang'?'selected':''}>Per orang berbayar</option>
+          <option value="pesanan" ${v?.per!=='orang'?'selected':''}>Per pesanan</option>
+        </select></div>
+      <div class="fld ${px}-persen"><label for="${px}-maks">Potongan paling besar <span style="font-weight:400;color:var(--muted)">(boleh dikosongkan)</span></label>
+        <input id="${px}-maks" inputmode="numeric" value="${v?.maks_potongan || ''}" placeholder="mis. 50000">
+        <div class="hint">Batas rupiah potongan per pesanan. Kosong = tanpa batas.</div></div>
+      <div class="fld ${px}-potong" style="grid-column:1/-1"><label>Berlaku untuk paket</label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px 18px">${produk.map(p => p.terima_voucher === false ? `
+          <label style="display:flex;gap:6px;align-items:center;font-weight:500;margin:0;color:var(--muted)"
+                 title="Diatur di Harga &amp; paket: paket ini tidak menerima voucher potongan">
+            <input type="checkbox" disabled style="width:auto;flex:none"> ${esc(p.nama)}
+            <span class="pill p-mute" style="font-size:10px">HARGA PROMO</span></label>` : `
+          <label style="display:flex;gap:6px;align-items:center;font-weight:500;margin:0">
+            <input type="checkbox" data-${px}-paket="${esc(p.slug)}" ${pilih.includes(p.slug)?'checked':''}
+              style="width:auto;flex:none"> ${esc(p.nama)}</label>`).join('')}</div>
+        <div class="hint">Tidak dicentang sama sekali = berlaku di semua paket yang menerima voucher.
+          Paket bertanda HARGA PROMO tidak bisa dipotong voucher (diatur di Harga &amp; paket).</div></div>
+      <div class="fld"><label for="${px}-kuota">Kuota pemakaian <span style="font-weight:400;color:var(--muted)">(boleh dikosongkan)</span></label>
+        <input id="${px}-kuota" inputmode="numeric" value="${v?.kuota || ''}" placeholder="mis. 50">
+        <div class="hint">Berapa pesanan yang boleh memakai kode ini. Pesanan batal tidak dihitung.
+          Kosong = tanpa batas.</div></div>
+      <div class="fld"><label for="${px}-mulai">Berlaku mulai <span style="font-weight:400;color:var(--muted)">(boleh dikosongkan)</span></label>
+        <input id="${px}-mulai" type="date" value="${v?.berlaku_mulai || ''}"></div>
+      <div class="fld"><label for="${px}-sampai">Berlaku sampai <span style="font-weight:400;color:var(--muted)">(boleh dikosongkan)</span></label>
+        <input id="${px}-sampai" type="date" value="${v?.berlaku_sampai || ''}">
+        <div class="hint">Untuk promo edisi tertentu. Dihitung dari <b>tanggal pemesanan</b>, bukan tanggal berangkat.</div></div>
+    </div>`;
+}
+function pasangFormIsiVoucher(akar, px){
+  const q = sel => akar.querySelector(sel);
+  const atur = () => {
+    const j = q(`#${px}-jenis`).value;
+    akar.querySelectorAll(`.${px}-potong`).forEach(e => e.style.display = j === 'pacitan' ? 'none' : '');
+    akar.querySelectorAll(`.${px}-nominal`).forEach(e => e.style.display = j === 'nominal' ? '' : 'none');
+    akar.querySelectorAll(`.${px}-persen`).forEach(e => e.style.display = j === 'persen' ? '' : 'none');
+    q(`#${px}-nilai-lbl`).textContent = j === 'persen' ? 'Besar potongan (%)' : 'Besar potongan (Rp)';
+    q(`#${px}-nilai`).placeholder = j === 'persen' ? 'mis. 10' : 'mis. 25000';
+    q(`#${px}-nilai-ket`).textContent = j === 'persen'
+      ? 'Dipotong dari harga tiket sesudah diskon kode agen. 1 sampai 100.'
+      : 'Rupiah yang dipotong. Tidak pernah melebihi harga tiketnya.';
+    q(`#${px}-jenis-ket`).textContent = j === 'pacitan'
+      ? 'Mengganti harga ke harga warga Pacitan. Hanya berlaku di paket yang punya dua harga.'
+      : 'Memotong harga tiket. Add-on tidak ikut dipotong.';
+  };
+  q(`#${px}-jenis`).onchange = atur; atur();
+}
+function bacaIsiVoucher(akar, px){
+  const q = sel => akar.querySelector(sel);
+  const angka = id => { const t = String(q(id).value || '').replace(/[^\d,.]/g, '').replace(',', '.'); return t ? Number(t) : null; };
+  const jenis = q(`#${px}-jenis`).value;
+  const mulai = q(`#${px}-mulai`).value || null, sampai = q(`#${px}-sampai`).value || null;
+  if (mulai && sampai && mulai > sampai) return { salah: 'Tanggal mulai tidak boleh sesudah tanggal selesai.' };
+  const kuotaTeks = String(q(`#${px}-kuota`).value || '').replace(/\D/g, '');
+  const kuota = kuotaTeks ? parseInt(kuotaTeks, 10) : null;
+  if (kuota !== null && kuota < 1) return { salah: 'Kuota minimal 1, atau kosongkan.' };
+  const data = { jenis, berlaku_mulai: mulai, berlaku_sampai: sampai, kuota,
+                 nilai: null, per: 'pesanan', maks_potongan: null, produk_slugs: null };
+  if (jenis !== 'pacitan'){
+    const nilai = angka(`#${px}-nilai`);
+    if (!(nilai > 0)) return { salah: 'Isi besar potongannya.' };
+    if (jenis === 'persen' && nilai > 100) return { salah: 'Potongan persen paling besar 100.' };
+    data.nilai = nilai;
+    if (jenis === 'nominal') data.per = q(`#${px}-per`).value;
+    if (jenis === 'persen'){
+      const m = String(q(`#${px}-maks`).value || '').replace(/\D/g, '');
+      data.maks_potongan = m ? parseInt(m, 10) : null;
+      if (data.maks_potongan === 0) data.maks_potongan = null;
+    }
+    const pk = [...akar.querySelectorAll(`[data-${px}-paket]`)].filter(c => c.checked)
+      .map(c => c.getAttribute(`data-${px}-paket`));
+    data.produk_slugs = pk.length ? pk : null;
+  }
+  return { data };
+}
+
 function statusVoucher(v){
   const h = hariIniLokal();
   if (!v.aktif) return ['NONAKTIF', 'p-mute'];
@@ -6899,10 +7022,21 @@ function statusVoucher(v){
   return ['BERLAKU', 'p-ok'];
 }
 async function tabVoucher(){
-  const [{ data, error }, { data:tamb, error:e2 }] = await Promise.all([
-    DB.from('kode_voucher').select('id,kode,keterangan,aktif,dibuat,berlaku_mulai,berlaku_sampai').order('dibuat', {ascending:false}),
-    DB.from('tambahan').select('id,slug,nama,ket,harga,satuan,maks,aktif').order('urutan')
+  const [{ data, error }, { data:tamb, error:e2 }, { data:prd }, { data:pakai }] = await Promise.all([
+    DB.from('kode_voucher').select('id,kode,keterangan,aktif,dibuat,berlaku_mulai,berlaku_sampai,'
+      + 'jenis,nilai,per,maks_potongan,produk_slugs,kuota').order('dibuat', {ascending:false}),
+    DB.from('tambahan').select('id,slug,nama,ket,harga,satuan,maks,aktif').order('urutan'),
+    DB.from('produk').select('slug,nama,bertingkat,aktif,terima_voucher').order('urutan'),
+    /* Hitungan terpakai = pesanan yang tidak batal, sama dengan voucher_terpakai(). */
+    DB.from('pesanan').select('kode_voucher_beku,status').not('kode_voucher_beku', 'is', null),
   ]);
+  const terpakai = {};
+  (pakai || []).forEach(o => {
+    if (['cancel_pembeli','cancel_cuaca','expired'].includes(o.status)) return;
+    const k = String(o.kode_voucher_beku).toLowerCase();
+    terpakai[k] = (terpakai[k] || 0) + 1;
+  });
+  const daftarProduk = (prd || []).filter(x => x.aktif);
   if (error) return gagal(error);
   if (e2) return gagal(e2);
   /* Dua izin terpisah, sengaja. Admin boleh mengubah HARGA ADD-ON (diminta
@@ -6917,48 +7051,55 @@ async function tabVoucher(){
       <h3>Terbitkan kode voucher</h3>
       <div class="grid g2">
         <div class="fld"><label for="v-kode">Kode</label>
-          <input id="v-kode" class="mono" placeholder="mis. PACITAN2026" maxlength="32" spellcheck="false">
+          <input id="v-kode" class="mono" placeholder="mis. PROMO1212" maxlength="32" spellcheck="false">
           <div class="hint">3–32 karakter: huruf, angka, titik, garis bawah, strip.</div></div>
         <div class="fld"><label for="v-ket">Keterangan</label>
-          <input id="v-ket" placeholder="mis. Harga warga Pacitan">
+          <input id="v-ket" placeholder="mis. Promo akhir tahun">
           <div class="hint">Muncul di halaman pemesanan saat kode diperiksa.</div></div>
-        <div class="fld"><label for="v-mulai">Berlaku mulai <span style="font-weight:400;color:var(--muted)">(boleh dikosongkan)</span></label>
-          <input id="v-mulai" type="date"></div>
-        <div class="fld"><label for="v-sampai">Berlaku sampai <span style="font-weight:400;color:var(--muted)">(boleh dikosongkan)</span></label>
-          <input id="v-sampai" type="date">
-          <div class="hint">Isi untuk promo edisi tertentu. Kosongkan dua-duanya kalau voucher berlaku terus.
-            Dihitung dari <b>tanggal pemesanan</b>, bukan tanggal berangkat.</div></div>
       </div>
+      ${formIsiVoucher('v', null, daftarProduk)}
       <button type="button" class="btn" id="v-buat">Terbitkan</button>
     </div>` : ''}
     <div class="card scrollx">
       <h3>Kode Voucher</h3>
       <table data-papan="voucher">
-        <thead><tr><th class="nw">Kode</th><th>Keterangan</th><th class="nw">Masa berlaku</th>
+        <thead><tr><th class="nw">Kode</th><th>Keterangan</th><th class="nw">Isi voucher</th>
+          <th class="nw">Masa berlaku</th><th class="nw">Terpakai</th>
           <th class="nw">Status</th><th class="nw">Dibuat</th><th class="nw">Tindakan</th></tr></thead>
-        <tbody>${(data||[]).length ? data.map(v=>{ const st = statusVoucher(v); return `<tr>
+        <tbody>${(data||[]).length ? data.map(v=>{ const n = terpakai[v.kode.toLowerCase()] || 0;
+          const st = v.aktif && v.kuota && n >= v.kuota ? ['KUOTA HABIS','p-dang'] : statusVoucher(v); return `<tr>
           <td class="mono nw"><b>${esc(v.kode)}</b></td>
           <td>${esc(v.keterangan || '—')}</td>
+          <td><span class="nama" style="max-width:240px">${isiVoucherDash(v, daftarProduk)}</span></td>
           <td class="nw" data-urut="${v.berlaku_sampai || '9999'}">${masaVoucher(v)}</td>
+          <td class="num nw" data-urut="${n}">${n}${v.kuota ? ` <span style="color:var(--muted)">/ ${v.kuota}</span>` : ''}</td>
           <td class="nw"><span class="pill ${st[1]}">${st[0]}</span></td>
           <td class="nw" style="color:var(--muted)">${tgl(v.dibuat)}</td>
           <td class="nw">${bisa
-            ? `<span class="sel2"><a class="aksi ghost" href="#" data-vmasa="${v.id}">Ubah masa</a>
+            ? `<span class="sel2"><a class="aksi ghost" href="#" data-vmasa="${v.id}">Ubah</a>
                <a class="aksi ${v.aktif?'matikan':'hidupkan'}" href="#"
                  data-vaktif="${v.id}" data-nilai="${v.aktif?0:1}">${
                  v.aktif?'Nonaktifkan':'Aktifkan'}</a></span>`
             : '<span style="color:var(--muted);font-size:11.5px">tidak bisa edit</span>'}</td>
-        </tr>`; }).join('') : `<tr><td colspan="6"><div class="hint">Belum ada kode voucher.</div></td></tr>`}</tbody>
+        </tr>`; }).join('') : `<tr><td colspan="8"><div class="hint">Belum ada kode voucher.</div></td></tr>`}</tbody>
       </table>
+      <div class="note"><b>Tiga jenis voucher</b>
+        <b>Harga warga Pacitan</b>: mengganti harga ke harga warga Pacitan, hanya di paket
+        yang punya dua harga (Cruise Daily).<br>
+        <b>Potongan persen</b>: memotong sekian persen dari harga tiket, boleh diberi batas
+        potongan paling besar.<br>
+        <b>Potongan nominal</b>: memotong sejumlah rupiah per orang berbayar atau per pesanan.<br>
+        Potongan dihitung dari harga tiket <b>sesudah</b> diskon kode agen (boleh digabung).
+        Add-on tidak ikut dipotong dan balita gratis tidak dihitung. Komisi agen dihitung dari
+        total sesudah potongan. Potongan tidak pernah melebihi harga tiketnya.</div>
       <div class="note"><b>Masa berlaku untuk promo edisi tertentu</b>
         Voucher bisa diberi tanggal mulai dan/atau tanggal selesai. Di luar tanggal itu,
         halaman pemesanan menolak kodenya dengan pesan "belum berlaku" atau "sudah
         berakhir". Patokannya <b>tanggal pemesanan</b> (WIB), jadi pesanan yang dibuat
         selama promo tetap dapat harganya walau berangkatnya sesudah promo selesai.</div>
-      <div class="note"><b>Voucher ini membuka harga warga Pacitan</b>
-        Nilainya tidak disimpan di kode voucher — diambil dari harga lokal di tabel
-        produk saat pemesanan. Jadi kalau harga warga Pacitan berubah, cukup diubah
-        di satu tempat dan semua voucher ikut.</div>
+      <div class="note"><b>Voucher harga warga Pacitan tidak menyimpan angka</b>
+        Nilainya diambil dari harga lokal di tabel produk saat pemesanan. Jadi kalau harga
+        warga Pacitan berubah, cukup diubah di satu tempat dan semua voucher jenis ini ikut.</div>
       <div class="note w"><b>Jangan tertukar dengan voucher Cruise PROMO</b>
         Yang di tabel ini adalah kode yang <b>diketik pemesan</b> untuk mendapat harga
         khusus. Voucher makan &amp; menginap yang <b>diberikan ke pembeli</b> Cruise PROMO
@@ -7035,18 +7176,16 @@ async function tabVoucher(){
     </div>`;
 
   if (bisa){
+    pasangFormIsiVoucher($('isi'), 'v');
     $('v-buat').onclick = async () => {
       const kode = $('v-kode').value.trim();
       if (!/^[A-Za-z0-9._-]{3,32}$/.test(kode))
         return pesan('<b>Ditolak</b> Kode harus 3–32 karakter: huruf, angka, titik, garis bawah, atau strip.', 9000);
-      $('v-buat').disabled = true;
-      const mulai = $('v-mulai').value || null, sampai = $('v-sampai').value || null;
-      if (mulai && sampai && mulai > sampai)
-        return pesan('<b>Ditolak</b> Tanggal mulai tidak boleh sesudah tanggal selesai.', 9000);
+      const isi = bacaIsiVoucher($('isi'), 'v');
+      if (isi.salah) return pesan('<b>Ditolak</b> ' + isi.salah, 9000);
       $('v-buat').disabled = true;
       const { error } = await DB.from('kode_voucher')
-        .insert({ kode, keterangan: $('v-ket').value.trim() || null,
-                  berlaku_mulai: mulai, berlaku_sampai: sampai });
+        .insert({ kode, keterangan: $('v-ket').value.trim() || null, aktif: true, ...isi.data });
       $('v-buat').disabled = false;
       if (error){
         if (error.code === '23505') return pesan(`<b>Ditolak</b> Kode <b>${esc(kode)}</b> sudah ada.`, 9000);
@@ -7059,30 +7198,25 @@ async function tabVoucher(){
       e.preventDefault();
       const v = (data || []).find(x => x.id === b.dataset.vmasa);
       const { q, tutup } = bukaLapis(`
-        <h3>Masa berlaku ${esc(v.kode)}</h3>
-        <div class="hint" style="margin-bottom:10px">Kosongkan dua-duanya supaya voucher berlaku terus.
-          Dihitung dari tanggal pemesanan (WIB).</div>
-        <div class="grid g2" style="margin-bottom:0">
-          <div class="fld"><label for="vm-mulai">Berlaku mulai</label>
-            <input id="vm-mulai" type="date" value="${v.berlaku_mulai || ''}"></div>
-          <div class="fld"><label for="vm-sampai">Berlaku sampai</label>
-            <input id="vm-sampai" type="date" value="${v.berlaku_sampai || ''}"></div>
-        </div>
+        <h3>Ubah voucher ${esc(v.kode)}</h3>
+        <div class="hint" style="margin-bottom:10px">Perubahan hanya berlaku untuk pesanan BARU.
+          Pesanan yang sudah memakai voucher ini tetap dengan potongannya semula.</div>
+        ${formIsiVoucher('vm', v, daftarProduk)}
         <div class="aksi-bar">
           <button type="button" class="btn ghost tbl-tutup">Batal</button>
           <button type="button" class="btn" id="vm-simpan">Simpan</button>
         </div>`);
       q('.tbl-tutup').onclick = tutup;
+      pasangFormIsiVoucher(q('.kotak'), 'vm');
       q('#vm-simpan').onclick = async () => {
-        const mulai = q('#vm-mulai').value || null, sampai = q('#vm-sampai').value || null;
-        if (mulai && sampai && mulai > sampai)
-          return pesan('<b>Ditolak</b> Tanggal mulai tidak boleh sesudah tanggal selesai.', 9000);
+        const isi = bacaIsiVoucher(q('.kotak'), 'vm');
+        if (isi.salah) return pesan('<b>Ditolak</b> ' + isi.salah, 9000);
         q('#vm-simpan').disabled = true;
         const { error } = await DB.from('kode_voucher')
-          .update({ berlaku_mulai: mulai, berlaku_sampai: sampai, diubah: new Date().toISOString() })
+          .update({ ...isi.data, diubah: new Date().toISOString() })
           .eq('id', v.id);
         if (error){ q('#vm-simpan').disabled = false; return gagalPesan(error); }
-        tutup(); pesan(`Masa berlaku ${esc(v.kode)} diperbarui.`); tabVoucher();
+        tutup(); pesan(`Voucher ${esc(v.kode)} diperbarui.`); tabVoucher();
       };
     });
     $('isi').querySelectorAll('[data-vaktif]').forEach(b => b.onclick = async e => {
@@ -7179,8 +7313,8 @@ async function tabVoucher(){
   }
 
   lengkapiTabel('#isi table[data-papan="voucher"]', {
-    id: 'voucher', takUrut: [5], petunjuk: 'Cari kode voucher…',
-    saring: [{ kolom: 3, semua: 'Semua status', pilihan: ['BERLAKU','BELUM MULAI','BERAKHIR','NONAKTIF'] }]
+    id: 'voucher', takUrut: [7], petunjuk: 'Cari kode voucher…',
+    saring: [{ kolom: 5, semua: 'Semua status', pilihan: ['BERLAKU','BELUM MULAI','BERAKHIR','KUOTA HABIS','NONAKTIF'] }]
   });
   lengkapiTabel('#isi table[data-papan="tambahan"]', {
     id: 'tambahan', takUrut: [5], petunjuk: 'Cari nama add-on…'
@@ -7925,7 +8059,7 @@ async function tabAtur(){
     /* SEMUA produk termasuk nonaktif: kalau disaring aktif=true, produk yang
        pernah dinonaktifkan tidak akan pernah bisa dihidupkan lagi dari layar. */
     DB.from('produk').select('id,slug,nama,deskripsi,bertingkat,harga_lokal,harga_umum,'
-      + 'harga_flat,dapat_voucher,aktif,urutan,foto_path').order('urutan'),
+      + 'harga_flat,dapat_voucher,aktif,urutan,foto_path,terima_voucher').order('urutan'),
   ]);
   if (error) return gagal(error);
   if (ePro)  return gagal(ePro);
@@ -8247,7 +8381,7 @@ async function tabAtur(){
              Sudah kejadian sekali waktu komentar ini ditulis. -->
         <thead><tr><th class="nw">Foto</th><th class="nw">Nama</th><th class="nw">Kode tetap</th><th class="nw">Model harga</th>
           <th class="num">Lokal</th><th class="num">Umum</th><th class="num">Flat</th>
-          <th class="nw">Kode warga Pacitan</th><th class="nw">Bonus voucher</th>
+          <th class="nw">Kode warga Pacitan</th><th class="nw">Voucher potongan</th><th class="nw">Bonus voucher</th>
           <th class="nw">Status</th><th></th></tr></thead>
         <tbody>${(produk||[]).map(p => `<tr>
           <td class="nw">${selFotoProduk(p)}</td>
@@ -8267,6 +8401,9 @@ async function tabAtur(){
           <td class="nw">${p.bertingkat
             ? '<span class="pill p-ok">BISA</span>'
             : '<span class="pill p-mute">TIDAK — harga sama untuk semua</span>'}</td>
+          <td class="nw">${p.terima_voucher === false
+            ? '<span class="pill p-warn">TIDAK — sudah harga promo</span>'
+            : '<span class="pill p-ok">BISA</span>'}</td>
           <td class="nw">${p.dapat_voucher
             ? '<span class="pill p-sea">makan &amp; menginap</span>'
             : '<span class="pill p-mute">—</span>'}</td>
@@ -8302,10 +8439,10 @@ async function tabAtur(){
      penyaring Status cuma akan menyaring kolom yang keliru, dan kolom aksi
      jadi bisa diurutkan. Diam, dan baru ketahuan waktu dipakai. */
   lengkapiTabel('#isi table[data-papan="produk"]', {
-    id: 'produk', takUrut: [0, 10], petunjuk: 'Cari nama produk atau kodenya…',
+    id: 'produk', takUrut: [0, 11], petunjuk: 'Cari nama produk atau kodenya…',
     saring: [
       { kolom: 3, semua: 'Semua model harga', pilihan: ['BERTINGKAT','HARGA SAMA'] },
-      { kolom: 9, semua: 'Semua status',      pilihan: ['DIJUAL','TIDAK DIJUAL'] },
+      { kolom: 10, semua: 'Semua status',     pilihan: ['DIJUAL','TIDAK DIJUAL'] },
     ]
   });
   if (!ro) pasangKelolaProduk(produk || []);

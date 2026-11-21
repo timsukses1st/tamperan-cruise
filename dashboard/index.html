@@ -818,6 +818,7 @@ function alamatLayar(nama, peran){
    diperbarui lebih buruk daripada tidak ada nomor sama sekali: orang akan
    yakin sedang melihat versi terbaru padahal bukan. */
 const RIWAYAT = [
+  ['2026-11-21c', 'Formulir voucher: potongan persen jadi pilihan awal dan isian besar potongan selalu terlihat'],
   ['2026-11-21b', 'Produk bisa ditandai tidak menerima voucher potongan (paket yang sudah berharga promo)'],
   ['2026-11-21a', 'Voucher punya jenis: harga warga Pacitan, potongan persen, atau potongan nominal, dengan pilihan paket dan kuota'],
   ['2026-11-18h', 'Balita di bawah 5 tahun gratis: tampil di daftar penumpang, formulir pesanan biro, dan ekspor'],
@@ -6924,17 +6925,20 @@ function isiVoucherDash(v, produk){
   return `${isi} <span style="color:var(--muted)">· ${esc(nmPaket)}</span>`;
 }
 function formIsiVoucher(px, v, produk){
-  const j = v?.jenis || 'pacitan', pilih = v?.produk_slugs || [];
+  /* 21 Nov 2026 (Kak Mer): pilihan awal = potongan persen. Dulu pilihan awal
+     "Harga warga Pacitan", sehingga isian besar potongan tersembunyi dan
+     formulir terlihat seperti tidak punya isian persen sama sekali. */
+  const j = v?.jenis || 'persen', pilih = v?.produk_slugs || [];
   return `
     <div class="grid g2">
       <div class="fld"><label for="${px}-jenis">Jenis voucher</label>
         <select id="${px}-jenis">
-          <option value="pacitan" ${j==='pacitan'?'selected':''}>Harga warga Pacitan</option>
           <option value="persen"  ${j==='persen'?'selected':''}>Potongan persen (%)</option>
           <option value="nominal" ${j==='nominal'?'selected':''}>Potongan nominal (Rp)</option>
+          <option value="pacitan" ${j==='pacitan'?'selected':''}>Harga warga Pacitan</option>
         </select>
         <div class="hint" id="${px}-jenis-ket"></div></div>
-      <div class="fld ${px}-potong"><label for="${px}-nilai" id="${px}-nilai-lbl">Besar potongan</label>
+      <div class="fld"><label for="${px}-nilai" id="${px}-nilai-lbl">Besar potongan</label>
         <input id="${px}-nilai" inputmode="numeric" value="${v && v.nilai != null ? Number(v.nilai) : ''}" placeholder="mis. 10">
         <div class="hint" id="${px}-nilai-ket"></div></div>
       <div class="fld ${px}-nominal"><label for="${px}-per">Dihitung</label>
@@ -6972,13 +6976,22 @@ function pasangFormIsiVoucher(akar, px){
   const atur = () => {
     const j = q(`#${px}-jenis`).value;
     akar.querySelectorAll(`.${px}-potong`).forEach(e => e.style.display = j === 'pacitan' ? 'none' : '');
+    /* Isian besar potongan SELALU terlihat. Untuk jenis Pacitan dikunci dan
+       diberi keterangan, bukan disembunyikan. */
+    const ni = q(`#${px}-nilai`);
+    ni.disabled = j === 'pacitan';
+    if (j === 'pacitan'){ ni.dataset.simpan = ni.value; ni.value = ''; }
+    else if (ni.dataset.simpan !== undefined && !ni.value){ ni.value = ni.dataset.simpan; }
     akar.querySelectorAll(`.${px}-nominal`).forEach(e => e.style.display = j === 'nominal' ? '' : 'none');
     akar.querySelectorAll(`.${px}-persen`).forEach(e => e.style.display = j === 'persen' ? '' : 'none');
-    q(`#${px}-nilai-lbl`).textContent = j === 'persen' ? 'Besar potongan (%)' : 'Besar potongan (Rp)';
-    q(`#${px}-nilai`).placeholder = j === 'persen' ? 'mis. 10' : 'mis. 25000';
+    q(`#${px}-nilai-lbl`).textContent = j === 'persen' ? 'Besar potongan (%)'
+      : j === 'nominal' ? 'Besar potongan (Rp)' : 'Besar potongan';
+    ni.placeholder = j === 'persen' ? 'mis. 10' : j === 'nominal' ? 'mis. 25000' : 'otomatis';
     q(`#${px}-nilai-ket`).textContent = j === 'persen'
       ? 'Dipotong dari harga tiket sesudah diskon kode agen. 1 sampai 100.'
-      : 'Rupiah yang dipotong. Tidak pernah melebihi harga tiketnya.';
+      : j === 'nominal' ? 'Rupiah yang dipotong. Tidak pernah melebihi harga tiketnya.'
+      : 'Tidak perlu diisi: harganya otomatis memakai harga warga Pacitan di Harga & paket '
+        + 'untuk paket yang punya dua harga (Cruise Daily).';
     q(`#${px}-jenis-ket`).textContent = j === 'pacitan'
       ? 'Mengganti harga ke harga warga Pacitan. Hanya berlaku di paket yang punya dua harga.'
       : 'Memotong harga tiket. Add-on tidak ikut dipotong.';
